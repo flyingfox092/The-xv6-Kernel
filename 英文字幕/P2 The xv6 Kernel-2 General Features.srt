@@ -1,0 +1,2212 @@
+1
+00:00:02,333 --> 00:00:06,766
+Hi, welcome to another video in a series on the xv6 operating system kernel.
+
+2
+00:00:07,000 --> 00:00:08,333
+Hi, welcome to another video in a series on the xv6 operating system kernel.
+
+3
+00:00:09,100 --> 00:00:11,400
+xv6 is an educational kernel,
+
+4
+00:00:11,533 --> 00:00:13,166
+and in this video,
+
+5
+00:00:13,166 --> 00:00:16,400
+I am going to talk about some general features of the kernel.
+
+6
+00:00:16,400 --> 00:00:17,200
+I am going to talk about some general features of the kernel.
+
+7
+00:00:18,300 --> 00:00:21,200
+It's meant to run on a shared memory multiprocessor.
+
+8
+00:00:21,466 --> 00:00:22,300
+In other words,
+
+9
+00:00:22,300 --> 00:00:25,100
+it's meant to run on a system with multiple cores
+
+10
+00:00:25,533 --> 00:00:28,700
+but which all share a single range of main memory.
+
+11
+00:00:29,900 --> 00:00:33,900
+In this video and in the code, I'm going to be using the
+
+12
+00:00:34,000 --> 00:00:38,900
+terms "CPU", "core" and "hart" synonymously.
+
+13
+00:00:38,966 --> 00:00:41,700
+So in the code sometimes you see CPU,
+
+14
+00:00:41,700 --> 00:00:42,933
+sometimes you see hart,
+
+15
+00:00:43,766 --> 00:00:45,333
+and I tend to say core,
+
+16
+00:00:45,466 --> 00:00:46,333
+but they all mean a hardware processor
+
+17
+00:00:46,700 --> 00:00:48,600
+but they all mean a hardware processor
+
+18
+00:00:48,600 --> 00:00:51,300
+capable of executing a single thread of control.
+
+19
+00:00:51,500 --> 00:00:52,666
+capable of executing a single thread of control.
+
+20
+00:00:53,500 --> 00:00:57,066
+This term "hart" which stands for hardware thread
+
+21
+00:00:57,300 --> 00:00:58,166
+is something that
+
+22
+00:00:58,166 --> 00:01:00,066
+I first encountered when reading the RISC-V documentation.
+
+23
+00:01:00,066 --> 00:01:02,066
+I first encountered when reading the RISC-V documentation.
+
+24
+00:01:02,900 --> 00:01:05,966
+The idea is normally a core will execute a single hardware thread
+
+25
+00:01:05,966 --> 00:01:07,100
+The idea is normally a core will execute a single hardware thread
+
+26
+00:01:07,166 --> 00:01:09,766
+but for some high performance cores
+
+27
+00:01:10,000 --> 00:01:10,966
+you might have
+
+28
+00:01:11,466 --> 00:01:13,500
+say two hardware threads.
+
+29
+00:01:13,700 --> 00:01:14,266
+For example
+
+30
+00:01:14,266 --> 00:01:17,466
+with the Intel Hyper-Threading architectures,
+
+31
+00:01:17,666 --> 00:01:20,100
+you might have two threads running on a single core.
+
+32
+00:01:20,700 --> 00:01:22,566
+The idea is that these two threads are being  interwoven, the instructions are being executed
+
+33
+00:01:23,133 --> 00:01:24,166
+The idea is that these two threads are being  interwoven, the instructions are being executed
+
+34
+00:01:24,466 --> 00:01:27,066
+The idea is that these two threads are being  interwoven, the instructions are being executed
+
+35
+00:01:28,400 --> 00:01:30,566
+concurrently or possibly interwoven.
+
+36
+00:01:30,766 --> 00:01:32,800
+In such a way to share some of the processing hardware.
+
+37
+00:01:32,866 --> 00:01:34,100
+In such a way to share some of the processing hardware.
+
+38
+00:01:34,733 --> 00:01:38,666
+The idea is to increase the performance per transistor,
+
+39
+00:01:41,300 --> 00:01:43,066
+so this term "hart" appears.
+
+40
+00:01:43,066 --> 00:01:45,933
+But for our purposes we're going to be running it on system
+
+41
+00:01:46,100 --> 00:01:47,400
+with multiple cores and so these terms are all synonymous,
+
+42
+00:01:48,066 --> 00:01:52,300
+with multiple cores and so these terms are all synonymous,
+
+43
+00:01:52,300 --> 00:01:55,566
+there's just a single hardware thread per core.
+
+44
+00:01:56,333 --> 00:01:59,400
+Okay, main memory is shared.
+
+45
+00:01:59,900 --> 00:02:01,566
+Sometimes, we call it RAM.
+
+46
+00:02:03,000 --> 00:02:05,600
+In a real operating system,
+
+47
+00:02:06,733 --> 00:02:09,900
+the issues (regarding the caching of main memory, L1, L2 and so on,) are important
+
+48
+00:02:10,133 --> 00:02:11,900
+the issues (regarding the caching of main memory, L1, L2 and so on,) are important
+
+49
+00:02:12,400 --> 00:02:13,600
+are important
+
+50
+00:02:13,900 --> 00:02:17,800
+and the kernel needs to sort of work around the
+
+51
+00:02:18,366 --> 00:02:20,766
+caching schemes and caching system.
+
+52
+00:02:20,900 --> 00:02:22,566
+In order to improve performance,
+
+53
+00:02:23,266 --> 00:02:24,200
+in this kernel
+
+54
+00:02:24,533 --> 00:02:28,066
+all concerns about caching are completely ignored.
+
+55
+00:02:29,266 --> 00:02:32,800
+The main memory is 128 megabytes (MB)
+
+56
+00:02:32,800 --> 00:02:35,766
+and this is just hardwired into the kernel's code.
+
+57
+00:02:35,900 --> 00:02:38,000
+It's fixed with a "#define".
+
+58
+00:02:38,066 --> 00:02:38,900
+It's fixed with a "#define".
+
+59
+00:02:39,800 --> 00:02:41,733
+A typical real world operating system kernel is going to
+
+60
+00:02:41,966 --> 00:02:42,566
+A typical real world operating system kernel is going to
+
+61
+00:02:42,566 --> 00:02:43,933
+A typical real world operating system kernel is going to
+
+62
+00:02:43,933 --> 00:02:46,266
+look at the amount of memory that's available on the machine when it starts up
+
+63
+00:02:46,900 --> 00:02:47,966
+look at the amount of memory that's available on the machine when it starts up
+
+64
+00:02:48,266 --> 00:02:49,600
+look at the amount of memory that's available on the machine when it starts up
+
+65
+00:02:49,600 --> 00:02:52,100
+and it's going to configure itself to use all the physical memory.
+
+66
+00:02:52,166 --> 00:02:54,133
+and it's going to configure itself to use all the physical memory.
+
+67
+00:02:55,166 --> 00:02:57,333
+But within the xv6
+
+68
+00:02:57,666 --> 00:03:01,000
+it's just hardwired in with 128 megabytes (MB).
+
+69
+00:03:02,300 --> 00:03:04,100
+The xv6 system can handle a couple of different devices.
+
+70
+00:03:04,533 --> 00:03:06,533
+The xv6 system can handle a couple of different devices.
+
+71
+00:03:07,400 --> 00:03:11,933
+The UART is the device that handles serial communication
+
+72
+00:03:12,600 --> 00:03:13,466
+This stands for Universal Asynchronous Received/Transmit Unit.
+
+73
+00:03:13,466 --> 00:03:16,166
+This stands for Universal Asynchronous Received/Transmit Unit.
+
+74
+00:03:16,400 --> 00:03:18,400
+In the old days it was a separate chip,
+
+75
+00:03:18,400 --> 00:03:19,966
+but now it's integrated on the processor chip along with the cores and so on.
+
+76
+00:03:20,066 --> 00:03:23,066
+but now it's integrated on the processor chip along with the cores and so on.
+
+77
+00:03:23,933 --> 00:03:26,300
+This is the device that provides a communication channel for printing and reading input from a keyboard.
+
+78
+00:03:26,300 --> 00:03:28,333
+This is the device that provides a communication channel for printing and reading input from a keyboard.
+
+79
+00:03:28,900 --> 00:03:31,000
+This is the device that provides a communication channel for printing and reading input from a keyboard.
+
+80
+00:03:31,000 --> 00:03:34,300
+Typically, if you program with the Arduino, you're probably going to be familiar with this.
+
+81
+00:03:34,500 --> 00:03:36,066
+Typically, if you program with the Arduino, you're probably going to be familiar with this.
+
+82
+00:03:36,066 --> 00:03:39,066
+Essentially, it can send a byte stream
+
+83
+00:03:39,366 --> 00:03:42,600
+ in one direction and receive a byte string
+
+84
+00:03:42,700 --> 00:03:44,466
+coming back in the other direction.
+
+85
+00:03:46,900 --> 00:03:49,100
+The xv6 system has one disk drive
+
+86
+00:03:49,933 --> 00:03:51,733
+The xv6 system has one disk drive
+
+87
+00:03:51,800 --> 00:03:53,900
+and that will be emulated, of course, with the file on your host laptop,
+
+88
+00:03:53,900 --> 00:03:56,400
+and that will be emulated, of course, with the file on your host laptop,
+
+89
+00:03:56,666 --> 00:03:57,900
+but there's a disk device.
+
+90
+00:03:58,666 --> 00:03:59,466
+but there's a disk device.
+
+91
+00:04:00,466 --> 00:04:02,700
+There are also timer interrupts.
+
+92
+00:04:03,366 --> 00:04:07,000
+The UART and the disk are shared between all the cores,
+
+93
+00:04:07,333 --> 00:04:10,600
+but each core has its own timer interrupt
+
+94
+00:04:10,700 --> 00:04:12,900
+so these are local to the core.
+
+95
+00:04:14,966 --> 00:04:17,300
+Processors in the real world
+
+96
+00:04:17,700 --> 00:04:18,500
+contain something called a plic or platform level interrupt controller 
+
+97
+00:04:18,566 --> 00:04:21,800
+contain something called a plic or platform level interrupt controller 
+
+98
+00:04:21,866 --> 00:04:24,933
+and what this does is a separate chip or separate circuit
+
+99
+00:04:25,066 --> 00:04:26,533
+and what this does is a separate chip or separate circuit
+
+100
+00:04:26,566 --> 00:04:28,466
+that deals with interrupts coming in from all the different devices that might be on a system
+
+101
+00:04:28,466 --> 00:04:30,866
+that deals with interrupts coming in from all the different devices that might be on a system
+
+102
+00:04:31,066 --> 00:04:34,600
+and it's figuring out which core should be interrupted
+
+103
+00:04:34,866 --> 00:04:38,200
+which core should be told about the interrupt and
+
+104
+00:04:38,366 --> 00:04:41,300
+allowed to handle the interrupt and deal with it
+
+105
+00:04:42,500 --> 00:04:44,866
+The emulator will emulate
+
+106
+00:04:45,566 --> 00:04:47,266
+the platform level interrupt controller
+
+107
+00:04:47,466 --> 00:04:49,466
+and there's also a core local interrupt controller which is also
+
+108
+00:04:49,466 --> 00:04:51,900
+and there's also a core local interrupt controller which is also
+
+109
+00:04:52,266 --> 00:04:53,766
+part of the emulation
+
+110
+00:04:53,866 --> 00:04:55,266
+and there is one of these core local interupt controllers
+
+111
+00:04:55,266 --> 00:04:57,700
+and there is one of these core local interupt controllers
+
+112
+00:04:57,733 --> 00:04:58,700
+for each core.
+
+113
+00:04:58,800 --> 00:05:00,900
+So the operating system has to deal with these things as well.
+
+114
+00:05:01,333 --> 00:05:02,500
+So the operating system has to deal with these things as well.
+
+115
+00:05:04,100 --> 00:05:06,166
+Memory management is pretty simple.
+
+116
+00:05:06,700 --> 00:05:09,466
+Memory physical memory is divided into pages,
+
+117
+00:05:09,466 --> 00:05:11,166
+and the page size is fixed with the "#define" at 4 kilobytes (KB).
+
+118
+00:05:11,366 --> 00:05:12,800
+and the page size is fixed with the "#define" at 4 kilobytes (KB).
+
+119
+00:05:13,266 --> 00:05:15,366
+and the page size is fixed with the "#define" at 4 kilobytes (KB).
+
+120
+00:05:16,700 --> 00:05:19,000
+Memory is allocated at least for the kernel from a freelist, there's a freelist of unused pages
+
+121
+00:05:19,733 --> 00:05:20,533
+Memory is allocated at least for the kernel from a freelist, there's a freelist of unused pages
+
+122
+00:05:20,966 --> 00:05:24,666
+Memory is allocated at least for the kernel from a freelist, there's a freelist of unused pages
+
+123
+00:05:24,766 --> 00:05:26,366
+and it's a simple link list
+
+124
+00:05:26,366 --> 00:05:28,466
+and whenever the kernel needs more memory
+
+125
+00:05:28,466 --> 00:05:30,666
+it allocates the page from the freelist
+
+126
+00:05:31,166 --> 00:05:33,766
+and when that page is no longer needed
+
+127
+00:05:33,866 --> 00:05:35,600
+it is returned by adding it to the front of the freelist
+
+128
+00:05:35,600 --> 00:05:37,733
+it is returned by adding it to the front of the freelist
+
+129
+00:05:37,733 --> 00:05:39,466
+very basic memory
+
+130
+00:05:39,933 --> 00:05:41,100
+allocation scheme
+
+131
+00:05:42,166 --> 00:05:46,500
+There are no objects in the operating system
+
+132
+00:05:46,900 --> 00:05:49,866
+in xv6 there are several different structures
+
+133
+00:05:49,900 --> 00:05:51,366
+and of course they're pointers
+
+134
+00:05:51,466 --> 00:05:54,400
+but with an object oriented programming language
+
+135
+00:05:54,400 --> 00:05:55,300
+typically you would be allocating variable sized objects
+
+136
+00:05:55,333 --> 00:05:57,666
+typically you would be allocating variable sized objects
+
+137
+00:05:58,666 --> 00:06:01,700
+none of that's going on in a real world kernel
+
+138
+00:06:01,700 --> 00:06:04,000
+there are other aspects for
+
+139
+00:06:05,133 --> 00:06:05,800
+there are other
+
+140
+00:06:05,800 --> 00:06:07,566
+techniques for allocating memory
+
+141
+00:06:07,566 --> 00:06:10,166
+to accommodate variable sized chunks of memory
+
+142
+00:06:10,166 --> 00:06:12,200
+but that doesn't happen in xv6
+
+143
+00:06:12,400 --> 00:06:14,266
+there's no "malloc" for example.
+
+144
+00:06:15,533 --> 00:06:18,733
+The virtual address spaces are handled with page tables.
+
+145
+00:06:18,900 --> 00:06:20,666
+The page tables are 3 levels.
+
+146
+00:06:20,666 --> 00:06:24,400
+I've shown diagrammatically 3 level page table
+
+147
+00:06:24,600 --> 00:06:26,733
+down at the bottom we have the data pages.
+
+148
+00:06:27,333 --> 00:06:30,300
+There is one table per process
+
+149
+00:06:30,400 --> 00:06:32,133
+and in addition, there is one page table for the kernel itself
+
+150
+00:06:32,333 --> 00:06:35,000
+and in addition, there is one page table for the kernel itself
+
+151
+00:06:35,166 --> 00:06:37,133
+which maps all of the physical memory
+
+152
+00:06:37,333 --> 00:06:41,866
+that table for the kernel is shared by all the cores
+
+153
+00:06:43,700 --> 00:06:44,700
+The page table hardware can accommodate marking the data pages
+
+154
+00:06:44,700 --> 00:06:47,500
+The page table hardware can accommodate marking the data pages
+
+155
+00:06:47,533 --> 00:06:48,700
+as either readable, writable, executable
+
+156
+00:06:48,700 --> 00:06:50,700
+as either readable, writable, executable
+
+157
+00:06:51,766 --> 00:06:53,700
+and U stands for user mode access and V stands for valid.
+
+158
+00:06:54,166 --> 00:06:56,800
+and U stands for user mode access and V stands for valid.
+
+159
+00:06:56,800 --> 00:06:59,266
+So, a page may or may not be writeable.
+
+160
+00:07:00,400 --> 00:07:03,000
+It may or may not be executable.
+
+161
+00:07:03,666 --> 00:07:06,800
+It may or may not be valid.
+
+162
+00:07:07,500 --> 00:07:08,700
+it can also be marked 
+
+163
+00:07:09,133 --> 00:07:10,666
+you or not you
+
+164
+00:07:10,733 --> 00:07:12,766
+and that determines whether
+
+165
+00:07:12,933 --> 00:07:14,566
+the page can be accessed when the processor is running in user mode.
+
+166
+00:07:14,566 --> 00:07:17,166
+the page can be accessed when the processor is running in user mode.
+
+167
+00:07:18,100 --> 00:07:20,166
+Well, I just use the word processor here
+
+168
+00:07:20,300 --> 00:07:22,900
+and probably I should say core
+
+169
+00:07:22,933 --> 00:07:25,366
+so sometimes I guess I use the word processor synonymously with CPU and core.
+
+170
+00:07:25,366 --> 00:07:27,933
+so sometimes I guess I use the word processor synonymously with CPU and core.
+
+171
+00:07:28,600 --> 00:07:30,533
+It shows my age perhaps.
+
+172
+00:07:30,700 --> 00:07:32,500
+So, some pages 
+
+173
+00:07:33,133 --> 00:07:34,266
+may be restricted
+
+174
+00:07:34,266 --> 00:07:36,500
+so that they can only be accessed when the core is running in
+
+175
+00:07:36,500 --> 00:07:37,666
+so that they can only be accessed when the core is running in
+
+176
+00:07:38,200 --> 00:07:40,800
+kernel mode and other pages can be accessed by user mode code.
+
+177
+00:07:41,300 --> 00:07:43,766
+kernel mode and other pages can be accessed by user mode code.
+
+178
+00:07:46,500 --> 00:07:49,800
+The scheduler for xv6 is quite simple
+
+179
+00:07:49,800 --> 00:07:52,566
+it's a basically a round-robin scheduler.
+
+180
+00:07:54,000 --> 00:07:56,766
+Each process is given a time-slicing and then it goes back
+
+181
+00:07:56,800 --> 00:07:58,266
+it becomes dormant sitting on the ready queue.
+
+182
+00:08:00,400 --> 00:08:02,600
+it becomes dormant sitting on the ready queue.
+
+183
+00:08:02,866 --> 00:08:05,533
+The size of all time slices are fixed.
+
+184
+00:08:05,533 --> 00:08:08,666
+It happens to be fixed at 1 million cycles.
+
+185
+00:08:10,300 --> 00:08:12,366
+All the cores share a single ready queue.
+
+186
+00:08:12,500 --> 00:08:14,700
+Sometimes a ready queue is called a ready list or
+
+187
+00:08:14,733 --> 00:08:16,700
+a run list or a run queue.
+
+188
+00:08:16,900 --> 00:08:18,933
+I'll use all those terms probably
+
+189
+00:08:20,266 --> 00:08:22,300
+but in any case there's only one of these things
+
+190
+00:08:24,366 --> 00:08:25,166
+Now
+
+191
+00:08:25,733 --> 00:08:29,066
+the cores share the single ready queue
+
+192
+00:08:29,300 --> 00:08:33,933
+and so when a core is ready to run a process
+
+193
+00:08:34,166 --> 00:08:35,966
+it will select a process
+
+194
+00:08:35,966 --> 00:08:38,900
+the next runnable process from the ready queue
+
+195
+00:08:39,000 --> 00:08:42,066
+and it will give it a time slice on that core
+
+196
+00:08:42,333 --> 00:08:43,166
+and then it will 
+
+197
+00:08:43,933 --> 00:08:46,866
+return it to the ready queue after the time slice ends.
+
+198
+00:08:47,133 --> 00:08:47,933
+and
+
+199
+00:08:48,500 --> 00:08:51,133
+so this ready queue is actually an array
+
+200
+00:08:51,133 --> 00:08:53,133
+and what's happening is each core
+
+201
+00:08:53,466 --> 00:08:56,766
+for scheduling is going through that array linearly
+
+202
+00:08:56,900 --> 00:08:58,166
+when it gets to the bottom of the array
+
+203
+00:08:58,166 --> 00:08:59,400
+goes back up to the top
+
+204
+00:08:59,533 --> 00:09:03,100
+and what it's doing is it's searching for a process
+
+205
+00:09:03,500 --> 00:09:04,566
+that is runnable
+
+206
+00:09:04,666 --> 00:09:06,666
+that is it's ready to go
+
+207
+00:09:06,666 --> 00:09:09,066
+and it's ready for its next time slice
+
+208
+00:09:09,600 --> 00:09:10,500
+and when it finds one
+
+209
+00:09:10,500 --> 00:09:11,566
+it gives it a time slice
+
+210
+00:09:11,566 --> 00:09:13,500
+and then after the time slice ends
+
+211
+00:09:13,600 --> 00:09:16,600
+It returns it to the ready queue as a runnable
+
+212
+00:09:16,600 --> 00:09:20,100
+process and moves on to the next process
+
+213
+00:09:20,100 --> 00:09:21,600
+and so it just keeps going through
+
+214
+00:09:21,600 --> 00:09:25,166
+each core keeps going through that array repeatedly
+
+215
+00:09:25,700 --> 00:09:29,800
+and so I said this is a round-robin scheduler
+
+216
+00:09:29,800 --> 00:09:32,566
+it's not quite round-robin
+
+217
+00:09:33,066 --> 00:09:34,533
+because what can happen is
+
+218
+00:09:34,900 --> 00:09:38,000
+particular process might be given a time slice
+
+219
+00:09:38,300 --> 00:09:40,333
+say on core No. 1
+
+220
+00:09:40,900 --> 00:09:44,133
+and then after the time slice completes
+
+221
+00:09:44,133 --> 00:09:47,533
+the core will put it back on the ready queue and
+
+222
+00:09:48,066 --> 00:09:51,733
+then move on to find another runnable process
+
+223
+00:09:52,300 --> 00:09:56,366
+but immediately or very soon after, some other core
+
+224
+00:09:56,766 --> 00:09:58,600
+perhaps core No. 4
+
+225
+00:09:59,366 --> 00:10:01,066
+might be searching through the array and it might happen to come to
+
+226
+00:10:01,466 --> 00:10:04,366
+might be searching through the array and it might happen to come to
+
+227
+00:10:04,800 --> 00:10:06,666
+that same process p
+
+228
+00:10:07,766 --> 00:10:11,900
+and so it will give it a time slice and then
+
+229
+00:10:12,400 --> 00:10:15,066
+put it back on the ready queue when the time slice ends.
+
+230
+00:10:15,200 --> 00:10:17,900
+So, what happens is this single process p
+
+231
+00:10:18,200 --> 00:10:21,200
+might be given a time slice on core No. 1
+
+232
+00:10:21,533 --> 00:10:23,533
+and then immediately after
+
+233
+00:10:23,533 --> 00:10:26,366
+given another time slice on core No. 4
+
+234
+00:10:26,766 --> 00:10:27,666
+and so
+
+235
+00:10:28,600 --> 00:10:30,166
+normally with round-robin
+
+236
+00:10:30,800 --> 00:10:33,700
+after process p is given a time slice
+
+237
+00:10:33,700 --> 00:10:35,966
+it needs to wait until all other
+
+238
+00:10:36,100 --> 00:10:38,566
+runnable processes have a chance to run
+
+239
+00:10:39,000 --> 00:10:41,666
+but with xv6
+
+240
+00:10:41,866 --> 00:10:43,200
+and the multiple cores
+
+241
+00:10:43,200 --> 00:10:46,266
+it's sort of round-robin within each core
+
+242
+00:10:47,166 --> 00:10:48,400
+so it's not quite a
+
+243
+00:10:48,866 --> 00:10:52,200
+proper round-robin scheduling but it's simple
+
+244
+00:10:52,200 --> 00:10:55,066
+and it's probably just about as effective equally 
+
+245
+00:10:56,500 --> 00:10:57,300
+efficient.
+
+246
+00:10:59,866 --> 00:11:02,533
+The boot sequence is pretty basic.
+
+247
+00:11:03,000 --> 00:11:05,100
+The emulator which will be
+
+248
+00:11:06,000 --> 00:11:10,100
+emulating the RISC-V processor and running our kernel
+
+249
+00:11:10,700 --> 00:11:14,500
+basically skips all the boot sequence altogether.
+
+250
+00:11:14,666 --> 00:11:17,566
+What it's going to do is it's going to load the kernel
+
+251
+00:11:17,700 --> 00:11:21,300
+from some executable file on your host laptop
+
+252
+00:11:21,400 --> 00:11:23,166
+and it's going to put it into
+
+253
+00:11:23,400 --> 00:11:25,533
+the memory or I should say the fixed
+
+254
+00:11:25,666 --> 00:11:28,100
+physical memory that the sorry the emulated
+
+255
+00:11:28,800 --> 00:11:29,866
+physical memory of the RISC-V processor it's emulating
+
+256
+00:11:30,466 --> 00:11:32,666
+physical memory of the RISC-V processor it's emulating
+
+257
+00:11:32,666 --> 00:11:34,333
+and it's going to put that
+
+258
+00:11:34,333 --> 00:11:36,200
+kernel code at a fixed location.
+
+259
+00:11:36,333 --> 00:11:38,933
+In fact, this is the actual location that it uses.
+
+260
+00:11:39,333 --> 00:11:40,266
+In fact, this is the actual location that it uses.
+
+261
+00:11:41,300 --> 00:11:44,933
+There's no support in xv6 for booting
+
+262
+00:11:45,133 --> 00:11:48,100
+a boot loader or a master boot record or
+
+263
+00:11:48,266 --> 00:11:49,766
+BIOS or anything like that.
+
+264
+00:11:51,700 --> 00:11:54,000
+This xv6 uses
+
+265
+00:11:54,400 --> 00:11:56,100
+a couple of techniques for locking and concurrency control.
+
+266
+00:11:56,133 --> 00:11:58,066
+a couple of techniques for locking and concurrency control.
+
+267
+00:11:58,966 --> 00:12:00,300
+Spin locks are used
+
+268
+00:12:01,066 --> 00:12:04,300
+and there are two functions: sleep() and wakeup().
+
+269
+00:12:05,200 --> 00:12:08,300
+With spin locks you have two functions.
+
+270
+00:12:08,366 --> 00:12:10,400
+They're called acquire() and release()
+
+271
+00:12:10,900 --> 00:12:13,133
+and there's a single word in memory
+
+272
+00:12:13,400 --> 00:12:17,666
+that word is 0 if the lock is free or unheld
+
+273
+00:12:17,700 --> 00:12:20,800
+and it is 1 if the lock is 
+
+274
+00:12:21,066 --> 00:12:24,733
+busy or is locked, is being held by some process
+
+275
+00:12:25,100 --> 00:12:25,700
+and what acquire()
+
+276
+00:12:25,700 --> 00:12:28,133
+will do is just basically in a tight loop
+
+277
+00:12:28,266 --> 00:12:29,666
+wait for that word
+
+278
+00:12:29,900 --> 00:12:31,733
+to become 0 unlocked
+
+279
+00:12:31,733 --> 00:12:33,200
+and then when it finds that it's unlocked
+
+280
+00:12:33,200 --> 00:12:34,333
+it will set it to 1
+
+281
+00:12:34,766 --> 00:12:38,300
+and release() just simply sets the word back to 0
+
+282
+00:12:41,200 --> 00:12:42,200
+sleep() and wakeup()
+
+283
+00:12:42,300 --> 00:12:44,166
+well when a particular
+
+284
+00:12:44,466 --> 00:12:46,500
+thread executes the sleep() function
+
+285
+00:12:46,600 --> 00:12:49,933
+it will end its time slice and it will be
+
+286
+00:12:49,933 --> 00:12:52,333
+placed back on the ready queue with
+
+287
+00:12:52,666 --> 00:12:53,933
+a status of runnable
+
+288
+00:12:54,166 --> 00:12:56,066
+sorry, with a status of not runnable
+
+289
+00:12:56,500 --> 00:12:59,400
+and it will then sleep until it's
+
+290
+00:13:00,133 --> 00:13:02,900
+been until it is woken up
+
+291
+00:13:03,466 --> 00:13:06,533
+so when a process executes the sleep() function
+
+292
+00:13:06,700 --> 00:13:08,866
+that process will no longer be runnable.
+
+293
+00:13:08,866 --> 00:13:11,866
+It will go into a blocked or sleep state
+
+294
+00:13:11,966 --> 00:13:14,133
+and it will not be scheduled
+
+295
+00:13:14,666 --> 00:13:16,866
+Later, some other process will
+
+296
+00:13:17,766 --> 00:13:20,566
+execute the wakeup() function and
+
+297
+00:13:21,066 --> 00:13:24,600
+wake up one or more processes, or 0 or more processes
+
+298
+00:13:24,766 --> 00:13:27,100
+and if our process happens to get
+
+299
+00:13:27,166 --> 00:13:29,400
+woken up then it will be changed
+
+300
+00:13:29,600 --> 00:13:33,100
+back from a status of sleeping or blocked to
+
+301
+00:13:33,366 --> 00:13:36,300
+runnable and then it will get time slices after that.
+
+302
+00:13:37,133 --> 00:13:39,900
+There's also a third technique that is sometimes used
+
+303
+00:13:39,900 --> 00:13:43,966
+and that is the selective disabling of interrupts.
+
+304
+00:13:44,866 --> 00:13:47,500
+So, each core has a status control word
+
+305
+00:13:47,500 --> 00:13:49,066
+and there is a bit in that control word that can be either set or cleared
+
+306
+00:13:49,066 --> 00:13:51,366
+and there is a bit in that control word that can be either set or cleared
+
+307
+00:13:51,766 --> 00:13:55,566
+which either enables and allows interrupts or disables and prevents interrupts.
+
+308
+00:13:55,600 --> 00:13:57,766
+which either enables and allows interrupts or disables and prevents interrupts.
+
+309
+00:13:58,766 --> 00:14:00,866
+By disabling interrupts
+
+310
+00:14:00,866 --> 00:14:03,066
+a thread running on one core can prevent being interrupted
+
+311
+00:14:03,100 --> 00:14:04,900
+a thread running on one core can prevent being interrupted
+
+312
+00:14:05,166 --> 00:14:09,266
+when a timer interrupt goes off or when an IO device 
+
+313
+00:14:09,566 --> 00:14:10,800
+calls for an interrupt.
+
+314
+00:14:11,133 --> 00:14:11,933
+So
+
+315
+00:14:12,200 --> 00:14:15,466
+we can use this technique on one core to prevent being 
+
+316
+00:14:15,866 --> 00:14:16,966
+interrupted by 
+
+317
+00:14:17,366 --> 00:14:19,533
+another thread on that same core.
+
+318
+00:14:20,066 --> 00:14:23,000
+However, xv6 is a multi core system
+
+319
+00:14:23,133 --> 00:14:26,533
+and disabling interrupts on one core has no impact on other cores
+
+320
+00:14:26,566 --> 00:14:28,266
+and disabling interrupts on one core has no impact on other cores
+
+321
+00:14:28,400 --> 00:14:31,200
+so a thread on another core can be modifying memory simultaneously.
+
+322
+00:14:31,200 --> 00:14:33,400
+so a thread on another core can be modifying memory simultaneously.
+
+323
+00:14:35,333 --> 00:14:38,000
+xv6 has a number of fixed limits
+
+324
+00:14:38,333 --> 00:14:41,733
+These are declared with pound sign defines (#define).
+
+325
+00:14:42,400 --> 00:14:42,966
+For example
+
+326
+00:14:42,966 --> 00:14:45,500
+the number of processes is just a fixed number.
+
+327
+00:14:46,066 --> 00:14:49,066
+As I said, the ready queue is stored in an array
+
+328
+00:14:49,066 --> 00:14:52,000
+and that array is allocated with a fixed size
+
+329
+00:14:52,733 --> 00:14:55,066
+The number of files open
+
+330
+00:14:55,266 --> 00:14:57,066
+the maximum number of files that can be opened simultaneously as a fixed number 
+
+331
+00:14:57,066 --> 00:14:58,200
+the maximum number of files that can be opened simultaneously as a fixed number
+
+332
+00:14:58,200 --> 00:14:59,266
+the maximum number of files that can be opened simultaneously as a fixed number
+
+333
+00:14:59,466 --> 00:15:00,400
+and so on.
+
+334
+00:15:01,966 --> 00:15:06,366
+The kernel tends to use arrays and not linked lists so much
+
+335
+00:15:06,533 --> 00:15:09,366
+and so in several situations we
+
+336
+00:15:09,500 --> 00:15:12,866
+are running through these arrays with a linear search.
+
+337
+00:15:13,400 --> 00:15:16,500
+For example, there is a function to kill a process
+
+338
+00:15:16,500 --> 00:15:19,333
+and it's passed the process ID
+
+339
+00:15:19,866 --> 00:15:23,300
+and what it does is it does a linear search of the 
+
+340
+00:15:23,466 --> 00:15:25,333
+array of processes.
+
+341
+00:15:25,866 --> 00:15:29,300
+Actually, this ready queue here is not a separate 
+
+342
+00:15:29,700 --> 00:15:30,666
+data structure.
+
+343
+00:15:30,866 --> 00:15:34,900
+There's a single array of processes
+
+344
+00:15:34,900 --> 00:15:38,366
+and some of them are marked runnable, and some of them are
+
+345
+00:15:38,866 --> 00:15:41,066
+not runnable and so when we
+
+346
+00:15:41,300 --> 00:15:43,066
+want to find a process that's runnable
+
+347
+00:15:43,066 --> 00:15:44,133
+we basically just
+
+348
+00:15:44,133 --> 00:15:45,400
+go through the process array
+
+349
+00:15:45,400 --> 00:15:47,966
+looking for one that has a status of runnable
+
+350
+00:15:48,566 --> 00:15:51,100
+and likewise when we want to kill a process
+
+351
+00:15:51,200 --> 00:15:53,566
+we just run through the array
+
+352
+00:15:53,666 --> 00:15:56,533
+looking for one that has a matching process ID.
+
+353
+00:15:58,466 --> 00:16:01,966
+OK, now let me talk about the user address space
+
+354
+00:16:02,366 --> 00:16:05,300
+so this is the virtual address space that a
+
+355
+00:16:05,400 --> 00:16:07,866
+user mode program sees
+
+356
+00:16:08,266 --> 00:16:11,500
+and here I'm showing the address starting at location 0
+
+357
+00:16:11,700 --> 00:16:14,266
+going up to the maximum virtual address (MAXVA)
+
+358
+00:16:15,533 --> 00:16:18,600
+The kernel will allocate this address space
+
+359
+00:16:18,600 --> 00:16:20,366
+in units of pages.
+
+360
+00:16:20,366 --> 00:16:24,133
+Each one of these is a 4k page
+
+361
+00:16:25,000 --> 00:16:29,533
+and so, when the exact system call is used, the kernel will 
+
+362
+00:16:30,466 --> 00:16:31,900
+go out to the file system
+
+363
+00:16:31,966 --> 00:16:36,400
+and find the executable file which is in ELF format
+
+364
+00:16:36,533 --> 00:16:40,533
+and it will allocate several pages
+
+365
+00:16:40,666 --> 00:16:42,733
+an integral number of pages here
+
+366
+00:16:42,900 --> 00:16:44,566
+and it will read in
+
+367
+00:16:45,000 --> 00:16:47,966
+the data and the code into this region of memory.
+
+368
+00:16:49,600 --> 00:16:52,100
+Those pages will then be marked read
+
+369
+00:16:52,100 --> 00:16:55,200
+write and executable by the kernel.
+
+370
+00:16:56,566 --> 00:17:00,000
+You also have a page allocated for the stack.
+
+371
+00:17:00,600 --> 00:17:03,733
+We see here that the stack only gets one page
+
+372
+00:17:04,100 --> 00:17:05,900
+4 kilobytes (KB) of memory
+
+373
+00:17:06,166 --> 00:17:10,333
+and so xv6 is somewhat limited in this aspect.
+
+374
+00:17:11,333 --> 00:17:15,733
+A process that wants to grow its stack beyond this will 
+
+375
+00:17:15,900 --> 00:17:17,066
+not be able to
+
+376
+00:17:17,566 --> 00:17:20,000
+and so xv6 cannot support that
+
+377
+00:17:22,466 --> 00:17:25,000
+and when a process tries to grow its stack beyond that
+
+378
+00:17:25,000 --> 00:17:27,200
+it will simply be aborted.
+
+379
+00:17:27,200 --> 00:17:28,900
+The process will be terminated
+
+380
+00:17:29,900 --> 00:17:32,900
+and the way the kernel does that is kind of clever
+
+381
+00:17:32,966 --> 00:17:36,466
+It allocates what is called a guard page right here
+
+382
+00:17:36,533 --> 00:17:39,200
+This guard page is not readable, not writable.
+
+383
+00:17:39,333 --> 00:17:40,133
+In fact
+
+384
+00:17:40,900 --> 00:17:43,600
+it's not accessible in user mode.
+
+385
+00:17:43,800 --> 00:17:47,766
+So, if the user mode code tries to access this page
+
+386
+00:17:48,533 --> 00:17:49,800
+its virtual address space
+
+387
+00:17:49,966 --> 00:17:51,466
+it will immediately cause an exception and the process will be
+
+388
+00:17:51,466 --> 00:17:53,566
+it will immediately cause an exception and the process will be 
+
+389
+00:17:53,700 --> 00:17:55,266
+thrown out and terminated.
+
+390
+00:17:57,133 --> 00:17:58,266
+The heap
+
+391
+00:17:59,200 --> 00:18:01,500
+starts after the stack and grows
+
+392
+00:18:02,866 --> 00:18:04,733
+in units of pages
+
+393
+00:18:05,333 --> 00:18:06,866
+this is called the brk
+
+394
+00:18:07,166 --> 00:18:09,000
+If you program in Linux or Unix
+
+395
+00:18:09,000 --> 00:18:11,133
+you may be familiar with this concept.
+
+396
+00:18:11,666 --> 00:18:16,500
+As the user mode code allocates things on its heap
+
+397
+00:18:17,200 --> 00:18:19,366
+this boundary here will be moved up.
+
+398
+00:18:19,700 --> 00:18:21,600
+The kernel will be invoked to allocate
+
+399
+00:18:22,466 --> 00:18:23,266
+The kernel will be invoked to allocate
+
+400
+00:18:23,466 --> 00:18:28,000
+more pages and the brk point will be moved up
+
+401
+00:18:28,400 --> 00:18:30,733
+and will consume some of the unused space.
+
+402
+00:18:31,000 --> 00:18:33,266
+These pages will be marked read and write.
+
+403
+00:18:35,666 --> 00:18:39,600
+I should say that in a typical Linux or Unix system
+
+404
+00:18:39,733 --> 00:18:40,933
+the stack is usually put in high memory and it grows down
+
+405
+00:18:40,933 --> 00:18:43,366
+the stack is usually put in high memory and it grows down
+
+406
+00:18:43,733 --> 00:18:45,600
+and it's capable of growing
+
+407
+00:18:45,766 --> 00:18:48,133
+and memory is only filled up when these two
+
+408
+00:18:48,133 --> 00:18:50,500
+when the heap and the stack run into each other
+
+409
+00:18:51,500 --> 00:18:53,500
+that's not done with xv6
+
+410
+00:18:53,500 --> 00:18:56,133
+we have just a single stack page down here
+
+411
+00:18:59,100 --> 00:19:00,933
+However, we have something interesting going on.
+
+412
+00:19:00,933 --> 00:19:01,800
+We have 
+
+413
+00:19:01,900 --> 00:19:04,733
+two pages up at the very top of the virtual memory space
+
+414
+00:19:04,733 --> 00:19:08,733
+virtual memory happens to be 256 gigabytes (GB)
+
+415
+00:19:08,800 --> 00:19:11,966
+so this unused space here is actually huge
+
+416
+00:19:12,866 --> 00:19:14,166
+and the heap may not take up very much of that
+
+417
+00:19:15,866 --> 00:19:17,700
+and the heap may not take up very much of that
+
+418
+00:19:17,700 --> 00:19:19,933
+and certainly it's not going to take it all up because
+
+419
+00:19:20,733 --> 00:19:21,666
+we only have 128 megabytes (MB) of physical memory
+
+420
+00:19:22,333 --> 00:19:25,666
+we only have 128 megabytes (MB) of physical memory
+
+421
+00:19:25,900 --> 00:19:27,666
+and we're not going to be able to accommodate
+
+422
+00:19:28,600 --> 00:19:29,600
+anything larger than that
+
+423
+00:19:29,600 --> 00:19:31,733
+any virtual address space that exceeds
+
+424
+00:19:32,333 --> 00:19:33,533
+128 megabytes (MB)
+
+425
+00:19:35,366 --> 00:19:38,966
+These pages up here are marked not accessible in user mode
+
+426
+00:19:39,366 --> 00:19:40,933
+These pages up here are marked not accessible in user mode
+
+427
+00:19:40,933 --> 00:19:44,566
+so user code cannot access these pages.
+
+428
+00:19:44,766 --> 00:19:45,733
+User mode cannot
+
+429
+00:19:45,866 --> 00:19:48,800
+read them or write them or execute any code from them.
+
+430
+00:19:49,500 --> 00:19:53,133
+These are used during trap and exception processing
+
+431
+00:19:54,300 --> 00:19:58,300
+so the trampoline page contains code, so it's executable
+
+432
+00:19:59,366 --> 00:20:02,266
+and when an exception or interrupt occurs
+
+433
+00:20:02,266 --> 00:20:03,133
+we're going to be executing code in the trampoline page.
+
+434
+00:20:03,266 --> 00:20:05,266
+we're going to be executing code in the trampoline page.
+
+435
+00:20:05,566 --> 00:20:06,933
+We'll discuss that later.
+
+436
+00:20:08,066 --> 00:20:09,333
+The trap frame 
+
+437
+00:20:09,666 --> 00:20:13,000
+is readable and writeable and that is where the registers will be saved
+
+438
+00:20:14,600 --> 00:20:16,166
+is readable and writeable and that is where the registers will be saved
+
+439
+00:20:16,466 --> 00:20:18,500
+When a trap that is when an exception or an interrupt occurs
+
+440
+00:20:18,700 --> 00:20:20,733
+When a trap that is when an exception or an interrupt occurs
+
+441
+00:20:20,933 --> 00:20:24,333
+the registers, the entire state of this user process
+
+442
+00:20:24,566 --> 00:20:28,133
+will be saved and it will be saved in the trap frame
+
+443
+00:20:28,500 --> 00:20:30,666
+by code in the trampoline page.
+
+444
+00:20:31,533 --> 00:20:32,333
+There is
+
+445
+00:20:34,066 --> 00:20:38,166
+each virtual address space has its own trap frame page
+
+446
+00:20:38,300 --> 00:20:41,200
+so they're all mapped to the same location
+
+447
+00:20:41,933 --> 00:20:45,666
+but there are different physical memory pages, so each
+
+448
+00:20:45,866 --> 00:20:47,200
+process has its own trap frame, the trampoline page is shared by all
+
+449
+00:20:47,900 --> 00:20:51,866
+process has its own trap frame, the trampoline page is shared by all
+
+450
+00:20:52,900 --> 00:20:56,866
+processes, so the exact same page of
+
+451
+00:20:57,066 --> 00:21:00,166
+physical memory is mapped into the same spot in all of the virtual address spaces.
+
+452
+00:21:00,300 --> 00:21:03,000
+physical memory is mapped into the same spot in all of the virtual address spaces.
+
+453
+00:21:05,066 --> 00:21:07,333
+One thing I was going to mention was that
+
+454
+00:21:08,600 --> 00:21:10,366
+I said that the kernel doesn't have a very sophisticated memory allocation system.
+
+455
+00:21:10,900 --> 00:21:12,400
+I said that the kernel doesn't have a very sophisticated memory allocation system.
+
+456
+00:21:12,766 --> 00:21:14,533
+I said that the kernel doesn't have a very sophisticated memory allocation system.
+
+457
+00:21:14,533 --> 00:21:15,400
+It just has 
+
+458
+00:21:16,300 --> 00:21:18,100
+pages and they are kept in a free list
+
+459
+00:21:18,100 --> 00:21:20,400
+and so all allocations are in
+
+460
+00:21:20,466 --> 00:21:25,000
+units of one page or 4096 bytes
+
+461
+00:21:25,000 --> 00:21:26,133
+4K bytes.
+
+462
+00:21:27,266 --> 00:21:31,866
+However, we accommodate heaps for the user mode programs
+
+463
+00:21:31,900 --> 00:21:35,600
+so a user mode program is free to implement malloc
+
+464
+00:21:35,966 --> 00:21:37,700
+and allocate things on the heap
+
+465
+00:21:37,766 --> 00:21:39,200
+in fact it's free to implement
+
+466
+00:21:39,733 --> 00:21:42,533
+whatever complex garbage collection algorithm it wants to
+
+467
+00:21:42,600 --> 00:21:43,400
+whatever complex garbage collection algorithm it wants to
+
+468
+00:21:43,900 --> 00:21:47,266
+but it just has this memory that can be grown here
+
+469
+00:21:48,100 --> 00:21:52,766
+to allocate its memory to accommodate its memory needs.
+
+470
+00:21:53,800 --> 00:21:55,900
+so I mentioned that this
+
+471
+00:21:56,666 --> 00:22:00,733
+"¬u" here means that the guard page is not
+
+472
+00:22:01,066 --> 00:22:03,700
+valid when it's accessed in user mode
+
+473
+00:22:03,766 --> 00:22:07,600
+Likewise, the trampoline and trap frame pages are not
+
+474
+00:22:08,400 --> 00:22:10,000
+accessible in user mode.
+
+475
+00:22:13,500 --> 00:22:16,733
+C programmers will be familiar with the main function
+
+476
+00:22:16,800 --> 00:22:20,166
+which takes a couple of arguments argc and argv
+
+477
+00:22:20,733 --> 00:22:21,466
+and these points are the arguments that are passed into the program when it begins executing.
+
+478
+00:22:21,466 --> 00:22:23,400
+and these points are the arguments that are passed into the program when it begins executing.
+
+479
+00:22:23,600 --> 00:22:25,333
+and these points are the arguments that are passed into the program when it begins executing.
+
+480
+00:22:26,100 --> 00:22:28,866
+You may also be familiar with something called arge
+
+481
+00:22:28,866 --> 00:22:30,166
+for environment
+
+482
+00:22:30,333 --> 00:22:31,900
+but that is not
+
+483
+00:22:32,600 --> 00:22:34,266
+accommodated with xv6.
+
+484
+00:22:34,333 --> 00:22:36,266
+xv6 doesn't
+
+485
+00:22:36,800 --> 00:22:39,966
+use any environment variables
+
+486
+00:22:40,166 --> 00:22:41,566
+just argc and argv
+
+487
+00:22:41,666 --> 00:22:43,166
+and how does that happen
+
+488
+00:22:43,400 --> 00:22:44,666
+well when an exact system call is made
+
+489
+00:22:45,300 --> 00:22:47,000
+well when an exact system call is made
+
+490
+00:22:47,300 --> 00:22:49,500
+the code in the kernel will set up the virtual address space here
+
+491
+00:22:49,800 --> 00:22:52,000
+the code in the kernel will set up the virtual address space here
+
+492
+00:22:52,066 --> 00:22:53,966
+and among other things
+
+493
+00:22:53,966 --> 00:22:55,733
+it will allocate a page for the stack
+
+494
+00:22:55,733 --> 00:23:01,300
+and it will push onto the stack the arguments
+
+495
+00:23:01,700 --> 00:23:03,100
+we'll get into the details of
+
+496
+00:23:03,100 --> 00:23:04,733
+exactly what to push later
+
+497
+00:23:04,733 --> 00:23:07,200
+but basically it's going to push all the arguments
+
+498
+00:23:07,200 --> 00:23:08,466
+onto the stack
+
+499
+00:23:08,466 --> 00:23:10,866
+and then set the stack pointer to be
+
+500
+00:23:11,500 --> 00:23:14,300
+something besides right here
+
+501
+00:23:14,900 --> 00:23:17,300
+It will allocate these things on the stack
+
+502
+00:23:17,300 --> 00:23:19,066
+essentially pushing them onto the stack
+
+503
+00:23:19,466 --> 00:23:21,166
+and moving them into the registers
+
+504
+00:23:21,166 --> 00:23:22,266
+so when
+
+505
+00:23:22,533 --> 00:23:26,666
+the first instruction of the user program is executed
+
+506
+00:23:26,866 --> 00:23:30,566
+it will already find several things on the stack
+
+507
+00:23:30,566 --> 00:23:33,266
+it will find its the arguments on the stack
+
+508
+00:23:34,333 --> 00:23:37,866
+now I mentioned that we could only have 256
+
+509
+00:23:39,733 --> 00:23:41,933
+gigabytes (GB) of virtual address space
+
+510
+00:23:42,066 --> 00:23:42,866
+I want to
+
+511
+00:23:43,333 --> 00:23:45,466
+mention that the RISC-V architecture.
+
+512
+00:23:46,266 --> 00:23:47,900
+mention that the RISC-V architecture.
+
+513
+00:23:48,933 --> 00:23:50,900
+It's a pretty complex architecture
+
+514
+00:23:50,900 --> 00:23:52,533
+and there's several different options
+
+515
+00:23:53,300 --> 00:23:54,600
+for page tables
+
+516
+00:23:54,600 --> 00:23:59,933
+there are three options called SV32, SV39, SV48
+
+517
+00:24:00,900 --> 00:24:04,566
+The version of the architecture being used for xv6
+
+518
+00:24:04,800 --> 00:24:06,900
+is the SV39 version.
+
+519
+00:24:07,533 --> 00:24:08,333
+is the SV39 version.
+
+520
+00:24:09,066 --> 00:24:11,666
+The first one is a two level page table scheme.
+
+521
+00:24:11,733 --> 00:24:14,766
+The second one is a three level page table scheme and
+
+522
+00:24:14,966 --> 00:24:16,666
+SV48 is a four level page table scheme
+
+523
+00:24:16,966 --> 00:24:18,600
+SV48 is a four level page table scheme
+
+524
+00:24:18,733 --> 00:24:23,200
+so xv6 uses SV39 architecture which
+
+525
+00:24:23,600 --> 00:24:27,600
+provides for our three level page tables
+
+526
+00:24:28,166 --> 00:24:28,966
+okay
+
+527
+00:24:29,800 --> 00:24:31,800
+and with that particular scheme
+
+528
+00:24:31,966 --> 00:24:34,200
+virtual addresses are 39 bits
+
+529
+00:24:34,866 --> 00:24:37,400
+well, 39 bits happens to be
+
+530
+00:24:38,866 --> 00:24:42,733
+2 to the 39 happens to be 512 gigabytes (GB)
+
+531
+00:24:42,933 --> 00:24:44,866
+so with this scheme
+
+532
+00:24:44,866 --> 00:24:47,733
+we could actually access 512 gigabytes (GB)
+
+533
+00:24:49,600 --> 00:24:53,500
+2 to the 39 expressed in hex is this number here
+
+534
+00:24:53,900 --> 00:24:55,733
+and so you can see
+
+535
+00:24:56,700 --> 00:25:00,000
+that expressed down here are 39 bits
+
+536
+00:25:00,300 --> 00:25:03,066
+and the first bit beyond that would be
+
+537
+00:25:03,466 --> 00:25:07,866
+in here, right here, 88 is 1000
+
+538
+00:25:08,533 --> 00:25:12,200
+and then 0, is 000 and so on.
+
+539
+00:25:20,300 --> 00:25:24,566
+so, it turns out that xv6 only uses 38 bits
+
+540
+00:25:24,866 --> 00:25:28,600
+okay, it does not use the full 39 bits, it's one bit shy
+
+541
+00:25:29,166 --> 00:25:33,300
+and so 2 to the 38 is actually 256 gigabytes (GB)
+
+542
+00:25:33,333 --> 00:25:36,800
+and that number is 40,0000,0000
+
+543
+00:25:36,966 --> 00:25:41,533
+that is equated to our maximum number
+
+544
+00:25:41,800 --> 00:25:46,766
+so this our address range is from 0 to
+
+545
+00:25:47,733 --> 00:25:48,733
+3F
+
+546
+00:25:49,466 --> 00:25:53,333
+that's 3 is 11 and then F 1111
+
+547
+00:25:53,400 --> 00:25:54,200
+so 3F
+
+548
+00:25:55,333 --> 00:26:01,800
+111111 and then  FFFF,FFFF
+
+549
+00:26:02,100 --> 00:26:06,200
+so our maximum address is this and
+
+550
+00:26:07,533 --> 00:26:10,666
+so maximum virtual address here is actually
+
+551
+00:26:11,133 --> 00:26:15,400
+the address of the byte just beyond our virtual address
+
+552
+00:26:18,166 --> 00:26:20,333
+okay, that's it for this video.
+
+553
+00:26:20,333 --> 00:26:21,933
+I'll see you on the next one.
+

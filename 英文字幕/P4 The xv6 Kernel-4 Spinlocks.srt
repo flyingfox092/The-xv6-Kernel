@@ -1,0 +1,1860 @@
+1
+00:00:01,800 --> 00:00:04,466
+This video is part of a series on the xv6
+
+2
+00:00:04,466 --> 00:00:05,766
+operating system kernel.
+
+3
+00:00:06,133 --> 00:00:06,733
+In this video
+
+4
+00:00:06,733 --> 00:00:08,500
+I'm going to describe spin locks
+
+5
+00:00:08,500 --> 00:00:11,933
+and tell you how they're implemented in the xv6 kernel.
+
+6
+00:00:12,766 --> 00:00:14,166
+First, let's start off with
+
+7
+00:00:14,166 --> 00:00:15,966
+remembering what spin locks are.
+
+8
+00:00:16,600 --> 00:00:18,166
+The idea is that
+
+9
+00:00:18,900 --> 00:00:21,333
+the spin lock is represented with a single word
+
+10
+00:00:21,333 --> 00:00:24,000
+and I've called that word "locked" here
+
+11
+00:00:24,700 --> 00:00:25,800
+and that word has
+
+12
+00:00:26,166 --> 00:00:28,900
+one of two values: it's either 0 or 1.
+
+13
+00:00:30,200 --> 00:00:32,566
+If it's 0, that means the lock is free
+
+14
+00:00:32,566 --> 00:00:34,733
+or sometimes we say it's unlocked or
+
+15
+00:00:34,733 --> 00:00:36,100
+it has been released
+
+16
+00:00:36,400 --> 00:00:38,000
+and if the value is 1
+
+17
+00:00:38,100 --> 00:00:43,166
+then the lock is said to be held or acquired or locked.
+
+18
+00:00:43,600 --> 00:00:46,133
+These are the common values that are typically used
+
+19
+00:00:46,133 --> 00:00:49,366
+and xv6 does that as well
+
+20
+00:00:50,266 --> 00:00:51,066
+okay, so
+
+21
+00:00:51,966 --> 00:00:57,200
+here is the structure that xv6 uses for a spin lock.
+
+22
+00:00:57,933 --> 00:01:00,600
+There are two other fields here
+
+23
+00:01:00,666 --> 00:01:02,066
+"name" and "cpu"
+
+24
+00:01:02,100 --> 00:01:04,500
+which you can see are just used for debugging.
+
+25
+00:01:04,666 --> 00:01:06,900
+So, here's what a spin lock looks like.
+
+26
+00:01:06,966 --> 00:01:09,066
+In addition to the key field
+
+27
+00:01:09,166 --> 00:01:11,300
+that tells the state of the lock.
+
+28
+00:01:11,333 --> 00:01:14,000
+We have a pointer to a string
+
+29
+00:01:14,166 --> 00:01:15,766
+which could be used for debugging
+
+30
+00:01:16,400 --> 00:01:18,500
+and we have this field called cpu
+
+31
+00:01:18,500 --> 00:01:20,200
+which points to some other structure.
+
+32
+00:01:20,866 --> 00:01:21,666
+Every core has a
+
+33
+00:01:22,333 --> 00:01:24,000
+Every core has a
+
+34
+00:01:24,300 --> 00:01:28,100
+structure associated with it, called a cpu structure
+
+35
+00:01:28,100 --> 00:01:30,733
+and this field contains a pointer to the
+
+36
+00:01:31,366 --> 00:01:35,700
+structure for the cpu that's currently holding the lock
+
+37
+00:01:36,666 --> 00:01:40,066
+okay, so the important functions on a spin lock
+
+38
+00:01:40,066 --> 00:01:41,600
+or any lock really
+
+39
+00:01:41,766 --> 00:01:44,000
+are acquire() and release()
+
+40
+00:01:44,333 --> 00:01:45,666
+In addition, we have a function that is
+
+41
+00:01:45,900 --> 00:01:47,166
+In addition, we have a function that is
+
+42
+00:01:47,266 --> 00:01:49,600
+to be called when the lock is first created
+
+43
+00:01:49,700 --> 00:01:51,400
+that initializes the lock
+
+44
+00:01:52,133 --> 00:01:53,533
+basically it's passed the name that we associate with the lock.
+
+45
+00:01:53,866 --> 00:01:56,133
+basically it's passed the name that we associate with the lock.
+
+46
+00:01:56,266 --> 00:01:58,500
+Once the name is set, it does not change.
+
+47
+00:01:58,866 --> 00:01:59,800
+We've also got a function that's used for error checking
+
+48
+00:01:59,933 --> 00:02:02,066
+We've also got a function that's used for error checking
+
+49
+00:02:02,100 --> 00:02:03,733
+to determine whether the current core is holding the lock.
+
+50
+00:02:03,733 --> 00:02:04,933
+to determine whether the current core is holding the lock.
+
+51
+00:02:05,366 --> 00:02:07,800
+Each of these functions is passed a pointer
+
+52
+00:02:07,933 --> 00:02:09,166
+to one of these spinlock structs
+
+53
+00:02:09,300 --> 00:02:11,166
+to one of these spinlock structs
+
+54
+00:02:11,166 --> 00:02:14,133
+So, it's passed a pointer like this pointer here
+
+55
+00:02:15,866 --> 00:02:18,333
+okay, to acquire the lock
+
+56
+00:02:18,533 --> 00:02:19,800
+typically, what we do
+
+57
+00:02:19,900 --> 00:02:23,800
+is we just set, we want to set the field to 1
+
+58
+00:02:24,400 --> 00:02:25,400
+but before we do that
+
+59
+00:02:25,400 --> 00:02:27,066
+we need to check to make sure that it's not currently being held
+
+60
+00:02:27,066 --> 00:02:28,333
+we need to check to make sure that it's not currently being held
+
+61
+00:02:28,400 --> 00:02:31,100
+so our first pass at coding
+
+62
+00:02:31,100 --> 00:02:33,333
+the acquire() function might look like this
+
+63
+00:02:33,766 --> 00:02:34,800
+check to see whether the lock is free and if it is free, then set it to 1
+
+64
+00:02:35,100 --> 00:02:38,100
+check to see whether the lock is free and if it is free, then set it to 1
+
+65
+00:02:38,500 --> 00:02:42,400
+and if it's not free, then loop back and keep trying
+
+66
+00:02:42,466 --> 00:02:44,533
+so these are spin locks
+
+67
+00:02:44,533 --> 00:02:47,166
+they spin, it's a tight loop that keeps checking
+
+68
+00:02:47,333 --> 00:02:50,733
+until it finds that the field is 0.
+
+69
+00:02:50,733 --> 00:02:53,133
+It sets it to 1 and then at that point
+
+70
+00:02:53,266 --> 00:02:54,600
+the lock is acquired.
+
+71
+00:02:55,200 --> 00:02:58,300
+Well, of course, this has a problem, if there are other threads that are executing concurrently.
+
+72
+00:02:58,400 --> 00:02:59,666
+Well, of course, this has a problem, if there are other threads that are executing concurrently.
+
+73
+00:03:00,166 --> 00:03:01,566
+Well, of course, this has a problem, if there are other threads that are executing concurrently.
+
+74
+00:03:01,700 --> 00:03:04,166
+In the case of xv6, we've got multiple cores
+
+75
+00:03:04,166 --> 00:03:07,300
+so this one particular field in memory
+
+76
+00:03:07,366 --> 00:03:11,366
+maybe accessed simultaneously by other cores
+
+77
+00:03:11,400 --> 00:03:12,800
+or perhaps if there's
+
+78
+00:03:13,600 --> 00:03:15,900
+thread switching going on within the single core
+
+79
+00:03:16,133 --> 00:03:18,133
+perhaps some other thread within the same core
+
+80
+00:03:18,133 --> 00:03:19,600
+is trying to access the same memory location
+
+81
+00:03:19,600 --> 00:03:20,733
+is trying to access the same memory location
+
+82
+00:03:21,100 --> 00:03:21,933
+and we could have
+
+83
+00:03:23,100 --> 00:03:25,866
+two threads simultaneously check this field
+
+84
+00:03:26,133 --> 00:03:29,400
+and just happen to find that they are both
+
+85
+00:03:30,400 --> 00:03:32,533
+that if the lock is unlocked and then
+
+86
+00:03:32,733 --> 00:03:35,200
+simultaneously both set the lock to 1
+
+87
+00:03:35,200 --> 00:03:38,333
+and so that's going to cause a problem because
+
+88
+00:03:38,466 --> 00:03:41,766
+they both now think they are holding the lock
+
+89
+00:03:42,000 --> 00:03:43,333
+so we have to
+
+90
+00:03:44,500 --> 00:03:47,100
+find another way to do it, this code will not work
+
+91
+00:03:47,733 --> 00:03:49,066
+and for that
+
+92
+00:03:49,400 --> 00:03:53,000
+the RISC-V architecture has an instruction called "amoswap"
+
+93
+00:03:53,000 --> 00:03:56,133
+atomic memory operation swap
+
+94
+00:03:56,700 --> 00:03:59,766
+and this single instruction will do two things
+
+95
+00:04:00,000 --> 00:04:01,900
+it will copy a value into a word of memory
+
+96
+00:04:02,266 --> 00:04:03,366
+it will copy a value into a word of memory
+
+97
+00:04:03,366 --> 00:04:04,400
+and at the same time
+
+98
+00:04:04,400 --> 00:04:06,300
+it will retrieve the previous value
+
+99
+00:04:06,300 --> 00:04:08,600
+of that word and it will do it without interruption
+
+100
+00:04:08,866 --> 00:04:09,933
+of that word and it will do it without interruption
+
+101
+00:04:10,766 --> 00:04:11,566
+it will 
+
+102
+00:04:12,700 --> 00:04:15,766
+not allow any other threads, or any other instructions
+
+103
+00:04:15,766 --> 00:04:17,566
+whether from this core or another core
+
+104
+00:04:17,900 --> 00:04:20,166
+to do anything between
+
+105
+00:04:20,566 --> 00:04:25,566
+the retrieval of the value and the setting of the value
+
+106
+00:04:26,700 --> 00:04:28,300
+so here's how we're gonna use that
+
+107
+00:04:28,500 --> 00:04:31,100
+atomic memory swap operation to
+
+108
+00:04:31,266 --> 00:04:33,566
+correct the problem that this code has.
+
+109
+00:04:34,333 --> 00:04:35,966
+We're going to execute the
+
+110
+00:04:35,966 --> 00:04:38,700
+atomic swap operation which I'm indicating
+
+111
+00:04:39,466 --> 00:04:40,533
+schematically here.
+
+112
+00:04:40,800 --> 00:04:42,800
+We're going to write a 1 into the location
+
+113
+00:04:42,866 --> 00:04:44,700
+and we're also going to retrieve
+
+114
+00:04:44,700 --> 00:04:46,666
+the old value, the previous value.
+
+115
+00:04:47,166 --> 00:04:48,500
+If the previous value
+
+116
+00:04:48,600 --> 00:04:51,600
+was 0, then we're done, we have acquired the lock.
+
+117
+00:04:51,733 --> 00:04:53,900
+But if the previous value was not 0
+
+118
+00:04:53,966 --> 00:04:54,566
+well, it must have been 1, because there are no other options.
+
+119
+00:04:54,566 --> 00:04:57,533
+well, it must have been 1, because there are no other options.
+
+120
+00:04:57,700 --> 00:05:01,366
+Then somebody else was previously holding the lock
+
+121
+00:05:01,366 --> 00:05:03,700
+so we have to loop back and try again
+
+122
+00:05:03,766 --> 00:05:04,800
+so then we spin until finally we find the previous value was 0
+
+123
+00:05:05,066 --> 00:05:08,533
+so then we spin until finally we find the previous value was 0
+
+124
+00:05:08,866 --> 00:05:11,266
+and we then have acquired the lock
+
+125
+00:05:11,600 --> 00:05:13,866
+The release() operation is pretty straightforward.
+
+126
+00:05:13,866 --> 00:05:16,600
+We just copy the unlocked value of 0 into the word
+
+127
+00:05:17,066 --> 00:05:20,000
+We just copy the unlocked value of 0 into the word
+
+128
+00:05:20,933 --> 00:05:24,133
+this doesn't, it's hard to imagine how copying
+
+129
+00:05:24,200 --> 00:05:25,566
+value into a single location of memory could be anything but atomic, so in some systems this is implemented
+
+130
+00:05:25,600 --> 00:05:27,266
+value into a single location of memory could be anything but atomic, so in some systems this is implemented
+
+131
+00:05:27,400 --> 00:05:31,400
+value into a single location of memory could be anything but atomic, so in some systems this is implemented
+
+132
+00:05:31,400 --> 00:05:34,333
+it's just a single memory store operation.
+
+133
+00:05:36,466 --> 00:05:38,566
+Okay, now let's look at the code for
+
+134
+00:05:39,666 --> 00:05:41,766
+the acquire operation.
+
+135
+00:05:42,900 --> 00:05:45,366
+First of all, we can take care of the init operation
+
+136
+00:05:45,366 --> 00:05:47,600
+this is code that's coming from the spinlock.c file
+
+137
+00:05:48,266 --> 00:05:49,600
+this is code that's coming from the spinlock.c file.
+
+138
+00:05:52,100 --> 00:05:53,266
+To initialize a spinlock
+
+139
+00:05:53,266 --> 00:05:55,266
+we pass a pointer to the structure
+
+140
+00:05:55,566 --> 00:05:56,566
+and the name.
+
+141
+00:05:56,800 --> 00:05:59,900
+We set the name field and it never changes after that.
+
+142
+00:06:00,333 --> 00:06:02,166
+We also set the cpu field to null, because the lock is not held
+
+143
+00:06:02,200 --> 00:06:04,666
+We also set the cpu field to null, because the lock is not held
+
+144
+00:06:04,700 --> 00:06:07,133
+and we set its initial value to 0.
+
+145
+00:06:08,133 --> 00:06:10,466
+Here is the code for the acquire() function
+
+146
+00:06:10,733 --> 00:06:12,600
+and here, right here, we see the
+
+147
+00:06:12,733 --> 00:06:14,766
+while loop that does exactly what I described previously.
+
+148
+00:06:14,766 --> 00:06:16,066
+while loop that does exactly what I described previously.
+
+149
+00:06:16,900 --> 00:06:19,866
+This magic  __sync_lock_test_and_set() is
+
+150
+00:06:20,400 --> 00:06:24,266
+going to be turned into some assembly code
+
+151
+00:06:24,366 --> 00:06:28,333
+and the comment here is indicating that the amoswap
+
+152
+00:06:29,066 --> 00:06:31,800
+instruction is going to be happening
+
+153
+00:06:31,800 --> 00:06:33,533
+and it talks about some registers
+
+154
+00:06:33,700 --> 00:06:35,766
+But essentially we're passing it a pointer to the word that we want to update
+
+155
+00:06:35,800 --> 00:06:38,600
+But essentially we're passing it a pointer to the word that we want to update
+
+156
+00:06:39,266 --> 00:06:41,866
+and we're passing it the new value which is 1
+
+157
+00:06:42,000 --> 00:06:45,133
+and this function is going to return the old value
+
+158
+00:06:45,200 --> 00:06:48,333
+and we're checking to see whether it is 0 or not
+
+159
+00:06:48,733 --> 00:06:50,566
+and if it was not 0
+
+160
+00:06:51,066 --> 00:06:53,400
+then we repeat this while loop
+
+161
+00:06:53,600 --> 00:06:57,266
+and if it was 0, then we acquire the lock and we're done.
+
+162
+00:06:57,933 --> 00:06:59,200
+Now, there are a couple of other things I want to mention about this function.
+
+163
+00:06:59,200 --> 00:07:00,366
+Now, there are a couple of other things I want to mention about this function.
+
+164
+00:07:00,866 --> 00:07:04,866
+First, once we acquire the lock, we are storing
+
+165
+00:07:05,600 --> 00:07:07,200
+into the cpu field.
+
+166
+00:07:07,900 --> 00:07:10,933
+Every core has a structure associated with it
+
+167
+00:07:11,266 --> 00:07:15,400
+so there are in fact 8 cores, so there are 8 structures
+
+168
+00:07:15,566 --> 00:07:16,666
+and this function here
+
+169
+00:07:16,666 --> 00:07:19,700
+will retrieve a pointer, or return a pointer to
+
+170
+00:07:19,800 --> 00:07:22,733
+the structure for the core that's currently executing
+
+171
+00:07:22,900 --> 00:07:25,300
+so we're just saving that here.
+
+172
+00:07:26,066 --> 00:07:27,600
+Up here, we are
+
+173
+00:07:28,733 --> 00:07:30,666
+checking to see whether before we
+
+174
+00:07:30,900 --> 00:07:32,666
+acquire the lock whether we already
+
+175
+00:07:33,200 --> 00:07:34,133
+whether it's already
+
+176
+00:07:35,333 --> 00:07:36,700
+being held by us
+
+177
+00:07:36,700 --> 00:07:38,900
+so we'll see the holding() function in just a second
+
+178
+00:07:39,133 --> 00:07:42,900
+if it is, then something is drastically the matter, so we cause an error message.
+
+179
+00:07:43,466 --> 00:07:44,700
+if it is, then something is drastically the matter, so we cause an error message.
+
+180
+00:07:45,800 --> 00:07:47,066
+Then we've got this
+
+181
+00:07:47,700 --> 00:07:49,400
+__sync_synchronize() going on here
+
+182
+00:07:50,000 --> 00:07:51,900
+so tell the C compiler and the processor
+
+183
+00:07:51,900 --> 00:07:54,166
+not to move loads or stores past this point
+
+184
+00:07:54,166 --> 00:07:54,933
+to ensure that the critical section's memory references
+
+185
+00:07:54,933 --> 00:07:57,000
+to ensure that the critical section's memory references
+
+186
+00:07:57,100 --> 00:07:58,500
+happen strictly after
+
+187
+00:07:58,600 --> 00:07:59,966
+the lock is acquired
+
+188
+00:08:00,300 --> 00:08:01,966
+this is a fence instruction.
+
+189
+00:08:02,733 --> 00:08:05,966
+So, we want to prevent the compiler from doing optimizations.
+
+190
+00:08:06,133 --> 00:08:07,866
+So, we want to prevent the compiler from doing optimizations.
+
+191
+00:08:08,066 --> 00:08:10,400
+It might in fact reorder things
+
+192
+00:08:10,666 --> 00:08:13,866
+and that is not acceptable though
+
+193
+00:08:14,066 --> 00:08:15,533
+anything that's supposed to be done
+
+194
+00:08:15,700 --> 00:08:17,400
+after we acquire this lock
+
+195
+00:08:17,466 --> 00:08:19,533
+after this while loop completes
+
+196
+00:08:19,600 --> 00:08:21,733
+must be done after that
+
+197
+00:08:22,066 --> 00:08:26,600
+so that's what this  __sync_synchronize() does, it forces
+
+198
+00:08:27,300 --> 00:08:30,666
+the compiler to emit code and the processor to
+
+199
+00:08:30,933 --> 00:08:32,966
+execute that code in such a way that everything
+
+200
+00:08:32,966 --> 00:08:34,500
+that is supposed to happen before
+
+201
+00:08:34,500 --> 00:08:36,766
+this point is completed
+
+202
+00:08:36,866 --> 00:08:39,100
+and everything that is supposed to happen
+
+203
+00:08:39,100 --> 00:08:40,066
+after this point
+
+204
+00:08:40,133 --> 00:08:42,566
+is not started until after this point.
+
+205
+00:08:43,933 --> 00:08:46,133
+We see one other thing here that's kind of unusual
+
+206
+00:08:46,133 --> 00:08:47,766
+and that is push_off()
+
+207
+00:08:48,100 --> 00:08:51,000
+the comment says disable interrupts to avoid deadlock
+
+208
+00:08:51,300 --> 00:08:53,066
+Holy Smoke! (天哪!)  What's that?
+
+209
+00:08:53,066 --> 00:08:55,866
+I mean, isn't this a lock situation here?
+
+210
+00:08:55,866 --> 00:08:58,533
+Why are interrupts involved at all?
+
+211
+00:08:59,066 --> 00:09:01,166
+I'll come back to that in a minute
+
+212
+00:09:01,166 --> 00:09:04,400
+so I'm going to just leave you in suspense.
+
+213
+00:09:04,933 --> 00:09:08,300
+But first let's take a look at the release operation
+
+214
+00:09:09,533 --> 00:09:12,933
+We do a quick check to make sure that we are in fact
+
+215
+00:09:12,933 --> 00:09:14,500
+holding this lock
+
+216
+00:09:15,166 --> 00:09:17,666
+and if not, we print an error message
+
+217
+00:09:17,733 --> 00:09:20,933
+and then we're going to be releasing it down here
+
+218
+00:09:21,300 --> 00:09:24,266
+and so we might as well go ahead and set the cpu field
+
+219
+00:09:24,266 --> 00:09:25,600
+to know at this point
+
+220
+00:09:26,466 --> 00:09:27,266
+and
+
+221
+00:09:27,800 --> 00:09:29,666
+here we are copying
+
+222
+00:09:30,300 --> 00:09:33,000
+the 0 into this field.
+
+223
+00:09:33,166 --> 00:09:34,200
+They're using an amoswap instruction to do it with this
+
+224
+00:09:34,200 --> 00:09:36,166
+They're using an amoswap instruction to do it with this
+
+225
+00:09:36,166 --> 00:09:37,766
+__sync_lock_release()
+
+226
+00:09:37,966 --> 00:09:41,500
+but like I said, it's hard to imagine how a
+
+227
+00:09:42,366 --> 00:09:44,900
+normal stored of memory could be anything less than atomic
+
+228
+00:09:45,000 --> 00:09:46,733
+normal stored of memory could be anything less than atomic
+
+229
+00:09:47,366 --> 00:09:48,366
+and we've got
+
+230
+00:09:49,300 --> 00:09:50,000
+pop_off()
+
+231
+00:09:50,000 --> 00:09:50,800
+pop_off()
+
+232
+00:09:51,000 --> 00:09:53,100
+Well, we've got the  __sync_synchronize() here, up here
+
+233
+00:09:54,533 --> 00:09:55,566
+which makes sure that anything that's supposed to happen
+
+234
+00:09:55,566 --> 00:09:56,900
+which makes sure that anything that's supposed to happen
+
+235
+00:09:56,900 --> 00:09:58,566
+before we release the lock
+
+236
+00:09:58,566 --> 00:09:59,866
+actually finishes
+
+237
+00:10:00,266 --> 00:10:02,000
+and that anything that's
+
+238
+00:10:02,166 --> 00:10:05,000
+and only after we finish that, do we actually
+
+239
+00:10:05,333 --> 00:10:07,933
+set the lock field to 0.
+
+240
+00:10:08,500 --> 00:10:09,933
+so, pop_off() is
+
+241
+00:10:10,566 --> 00:10:14,366
+a partner, a dual of push_off() and
+
+242
+00:10:14,500 --> 00:10:17,800
+so, what it does is it enables interrupts
+
+243
+00:10:17,800 --> 00:10:19,200
+and I'll come back to that
+
+244
+00:10:19,333 --> 00:10:20,966
+in a second, but
+
+245
+00:10:21,733 --> 00:10:23,500
+first let's look at this holding() function
+
+246
+00:10:23,500 --> 00:10:25,666
+just to complete this code
+
+247
+00:10:26,166 --> 00:10:29,166
+This just checks to see whether
+
+248
+00:10:29,300 --> 00:10:31,400
+the current core that's executing this is holding the lock.
+
+249
+00:10:31,400 --> 00:10:33,266
+the current core that's executing this is holding the lock.
+
+250
+00:10:33,966 --> 00:10:35,200
+okay
+
+251
+00:10:36,166 --> 00:10:40,000
+it looks at the value of the field and if it's 1 and
+
+252
+00:10:40,266 --> 00:10:42,766
+the cpu is the same as this core
+
+253
+00:10:42,933 --> 00:10:46,466
+then it returns true and otherwise it returns false.
+
+254
+00:10:49,500 --> 00:10:50,466
+A spinlock should never be held for a long period of time,
+
+255
+00:10:50,466 --> 00:10:52,600
+A spinlock should never be held for a long period of time,
+
+256
+00:10:53,366 --> 00:10:56,133
+Imagine a situation where one core is holding a lock
+
+257
+00:10:56,133 --> 00:10:58,533
+and another core wants to acquire that lock.
+
+258
+00:10:58,866 --> 00:11:01,200
+Well, the acquire() function is going to be spinning in a
+
+259
+00:11:01,200 --> 00:11:04,266
+tight loop, waiting for the lock to become free.
+
+260
+00:11:04,600 --> 00:11:07,133
+So, as a general rule of thumb, you should always
+
+261
+00:11:07,800 --> 00:11:11,300
+plan to release the lock soon after it's acquired.
+
+262
+00:11:11,500 --> 00:11:12,333
+In particular
+
+263
+00:11:12,333 --> 00:11:13,133
+we don't want the thread that's holding the lock to go to
+
+264
+00:11:13,133 --> 00:11:14,866
+we don't want the thread that's holding the lock to go to
+
+265
+00:11:14,866 --> 00:11:16,800
+sleep or to get time sliced.
+
+266
+00:11:17,900 --> 00:11:19,800
+There are other techniques for locking
+
+267
+00:11:19,966 --> 00:11:23,333
+in xv6 we have the sleep() and the wakeup() function
+
+268
+00:11:23,400 --> 00:11:25,333
+and these can be used in situations where
+
+269
+00:11:25,333 --> 00:11:27,500
+the lock needs to be held for a long period of time.
+
+270
+00:11:29,100 --> 00:11:31,366
+Locks are used to protect shared data.
+
+271
+00:11:32,133 --> 00:11:32,933
+Actually the xv6 documentation has some interesting wisdom.
+
+272
+00:11:33,166 --> 00:11:36,266
+Actually the xv6 documentation has some interesting wisdom.
+
+273
+00:11:37,200 --> 00:11:39,300
+They point out that locks really protect
+
+274
+00:11:39,800 --> 00:11:42,700
+constraints and I think that's a nice way to put it.
+
+275
+00:11:42,866 --> 00:11:45,200
+But in any case
+
+276
+00:11:45,666 --> 00:11:46,733
+we usually are almost always see this particular pattern here.
+
+277
+00:11:46,733 --> 00:11:49,200
+we usually are almost always see this particular pattern here.
+
+278
+00:11:49,500 --> 00:11:50,766
+We acquire the lock
+
+279
+00:11:50,966 --> 00:11:52,733
+then we access the shared data
+
+280
+00:11:52,733 --> 00:11:54,333
+and then we release the lock.
+
+281
+00:11:56,933 --> 00:11:59,366
+The code here is often called a critical section (临界区).
+
+282
+00:11:59,533 --> 00:12:01,200
+In other words, it's critical
+
+283
+00:12:01,200 --> 00:12:04,266
+it can only be executed by one thread at a time
+
+284
+00:12:04,266 --> 00:12:08,666
+so therefore this code is protected by a lock.
+
+285
+00:12:09,766 --> 00:12:13,133
+Let's look at a quick example and I'm going to imagine
+
+286
+00:12:13,466 --> 00:12:15,400
+input a character, input that's
+
+287
+00:12:15,400 --> 00:12:17,966
+coming from somewhere and going to someplace else.
+
+288
+00:12:18,100 --> 00:12:20,500
+So, perhaps we have a keyboard
+
+289
+00:12:20,500 --> 00:12:23,100
+and every time the user types on the keyboard
+
+290
+00:12:23,600 --> 00:12:28,166
+an interrupt handler wakes up and adds a character to
+
+291
+00:12:28,300 --> 00:12:29,533
+a shared buffer.
+
+292
+00:12:29,533 --> 00:12:32,733
+So the buffer is the shared memory item
+
+293
+00:12:32,800 --> 00:12:34,533
+and it's going to be a FIFO queue.
+
+294
+00:12:34,533 --> 00:12:36,966
+So the data goes in one end
+
+295
+00:12:37,000 --> 00:12:38,333
+and there's some other thread that is reading from the buffer
+
+296
+00:12:38,466 --> 00:12:40,300
+and there's some other thread that is reading from the buffer
+
+297
+00:12:40,866 --> 00:12:43,000
+when it needs a character, it just
+
+298
+00:12:43,500 --> 00:12:46,766
+needs to access this shared data structure
+
+299
+00:12:47,000 --> 00:12:48,933
+which we will need to protect
+
+300
+00:12:48,933 --> 00:12:52,333
+and in this example we will protect it with a spinlock.
+
+301
+00:12:52,500 --> 00:12:55,966
+So here's the code that we might see in the handler.
+
+302
+00:12:56,400 --> 00:12:58,066
+It acquires the spinlock
+
+303
+00:12:58,533 --> 00:12:59,733
+adds a character to the buffer
+
+304
+00:12:59,733 --> 00:13:01,166
+and then releases the lock.
+
+305
+00:13:01,366 --> 00:13:02,800
+The thread that wants to get input is going to acquire
+
+306
+00:13:03,000 --> 00:13:05,266
+The thread that wants to get input is going to acquire
+
+307
+00:13:05,400 --> 00:13:07,800
+the lock, so it can access the shared buffer
+
+308
+00:13:07,900 --> 00:13:10,133
+remove a character and release the lock.
+
+309
+00:13:10,566 --> 00:13:12,166
+I'm not going to be concerned with what happens
+
+310
+00:13:12,166 --> 00:13:13,566
+if the buffer is completely full
+
+311
+00:13:13,566 --> 00:13:14,766
+or completely empty.
+
+312
+00:13:17,533 --> 00:13:20,100
+The handler is called when
+
+313
+00:13:20,166 --> 00:13:22,300
+someone types a character on the keyboard
+
+314
+00:13:22,366 --> 00:13:24,366
+and interrupt handlers
+
+315
+00:13:24,866 --> 00:13:26,900
+begin with the trap processing
+
+316
+00:13:26,900 --> 00:13:29,466
+which will disable interrupts
+
+317
+00:13:29,466 --> 00:13:31,533
+and then they'll do some stuff basically
+
+318
+00:13:31,666 --> 00:13:34,166
+this stuff here in the case of our example
+
+319
+00:13:34,500 --> 00:13:35,300
+and then
+
+320
+00:13:35,333 --> 00:13:37,966
+they will return to the interrupted code with the
+
+321
+00:13:38,900 --> 00:13:42,666
+sret instruction which will re-enable interrupts
+
+322
+00:13:42,666 --> 00:13:45,733
+so we might imagine a thread "T" that's running like this
+
+323
+00:13:46,766 --> 00:13:50,066
+an interrupt happens as a result of a key being pressed
+
+324
+00:13:50,266 --> 00:13:51,566
+the handler runs
+
+325
+00:13:51,566 --> 00:13:53,166
+and then when it's done, adding the character to the buffer
+
+326
+00:13:53,166 --> 00:13:53,933
+and then when it's done, adding the character to the buffer
+
+327
+00:13:53,933 --> 00:13:56,800
+it returns to the interrupted thread whatever it was
+
+328
+00:13:56,900 --> 00:13:58,133
+and continues.
+
+329
+00:13:58,933 --> 00:14:01,166
+Well, so you can imagine this situation
+
+330
+00:14:01,866 --> 00:14:02,666
+if "T"
+
+331
+00:14:03,333 --> 00:14:06,500
+happens to be this thread here that acquires a lock
+
+332
+00:14:06,866 --> 00:14:10,266
+and then at just the wrong moment the interupt comes in
+
+333
+00:14:10,466 --> 00:14:13,766
+from the keyboard and the handler is invoked
+
+334
+00:14:13,800 --> 00:14:15,266
+and the first thing the handler does is try to acquire that lock
+
+335
+00:14:15,266 --> 00:14:17,900
+and the first thing the handler does is try to acquire that lock
+
+336
+00:14:18,266 --> 00:14:19,066
+well
+
+337
+00:14:19,533 --> 00:14:21,500
+it will wait until the lock is released
+
+338
+00:14:21,500 --> 00:14:24,066
+but unfortunately the thread that is holding the lock
+
+339
+00:14:24,333 --> 00:14:26,333
+is waiting for the handler to complete
+
+340
+00:14:26,566 --> 00:14:28,666
+so we've got a deadlock situation.
+
+341
+00:14:29,933 --> 00:14:32,166
+In operating systems
+
+342
+00:14:32,200 --> 00:14:34,266
+we need to remember that if anything
+
+343
+00:14:34,366 --> 00:14:36,133
+if any combination of events
+
+344
+00:14:36,200 --> 00:14:38,500
+can possibly theoretically happen
+
+345
+00:14:39,066 --> 00:14:40,933
+it's best to assume that it will happen
+
+346
+00:14:41,000 --> 00:14:41,800
+no matter how unlikely or how rarely you think the event is.
+
+347
+00:14:41,866 --> 00:14:45,600
+no matter how unlikely or how rarely you think the event is.
+
+348
+00:14:47,400 --> 00:14:50,200
+Our first approach to solving the problem of deadlock
+
+349
+00:14:50,266 --> 00:14:53,966
+is to disable interrupts in the acquire() function
+
+350
+00:14:54,200 --> 00:14:56,266
+and then to re-enable them in the release() function.
+
+351
+00:14:56,533 --> 00:14:57,900
+and then to re-enable them in the release() function.
+
+352
+00:14:58,866 --> 00:15:00,900
+So we don't have a situation like this:
+
+353
+00:15:01,000 --> 00:15:03,133
+if "T" acquires a lock, it will
+
+354
+00:15:03,466 --> 00:15:04,933
+disable interrupt, so it cannot have a situation where
+
+355
+00:15:05,133 --> 00:15:06,733
+disable interrupt, so it cannot have a situation where
+
+356
+00:15:06,866 --> 00:15:09,400
+some other thread on that same core is trying to acquire the lock.
+
+357
+00:15:09,900 --> 00:15:12,133
+some other thread on that same core is trying to acquire the lock.
+
+358
+00:15:13,966 --> 00:15:15,200
+This also has an additional benefit:
+
+359
+00:15:16,133 --> 00:15:18,966
+we don't want to hold spinlocks for very long
+
+360
+00:15:19,466 --> 00:15:21,700
+so by disabling interrupts
+
+361
+00:15:21,700 --> 00:15:24,133
+we are preventing timeslicing from happening
+
+362
+00:15:24,133 --> 00:15:25,333
+while the lock is held
+
+363
+00:15:25,333 --> 00:15:26,333
+and we are preventing interrupt processing from occurring
+
+364
+00:15:26,400 --> 00:15:28,966
+and we are preventing interrupt processing from occurring
+
+365
+00:15:29,500 --> 00:15:31,333
+basically we're allowing the core
+
+366
+00:15:31,400 --> 00:15:35,466
+to focus on the thread that is holding the lock and to
+
+367
+00:15:35,700 --> 00:15:38,300
+complete its critical section without interruption
+
+368
+00:15:38,400 --> 00:15:41,400
+quickly and then release the lock
+
+369
+00:15:42,733 --> 00:15:44,366
+but now we have another problem:
+
+370
+00:15:44,700 --> 00:15:47,333
+What if interrupts are already disabled?
+
+371
+00:15:47,666 --> 00:15:50,133
+For example, in our handler code
+
+372
+00:15:50,400 --> 00:15:52,200
+we have interrupts disabled and
+
+373
+00:15:52,200 --> 00:15:54,900
+for a number of reasons we don't want to re-enable
+
+374
+00:15:54,900 --> 00:15:57,866
+interrupts prematurely before we get to the system return instruction.
+
+375
+00:15:58,066 --> 00:15:59,700
+interrupts prematurely before we get to the system return instruction.
+
+376
+00:16:00,966 --> 00:16:03,000
+We might also have several spinlocks that we need to acquire
+
+377
+00:16:03,766 --> 00:16:06,100
+We might also have several spinlocks that we need to acquire
+
+378
+00:16:06,200 --> 00:16:07,500
+and so we have
+
+379
+00:16:07,800 --> 00:16:11,100
+perhaps three acquire() functions being called in a row
+
+380
+00:16:11,100 --> 00:16:13,333
+and for each one of those will have three release()
+
+381
+00:16:13,333 --> 00:16:16,466
+functions, but the first release() will
+
+382
+00:16:17,366 --> 00:16:19,766
+disable, sorry, will re-enable interrupts
+
+383
+00:16:19,766 --> 00:16:21,800
+and that might not be quite what we want
+
+384
+00:16:22,266 --> 00:16:24,666
+so essentially we want this release()
+
+385
+00:16:24,766 --> 00:16:27,600
+to return the interrupt status to whatever it was
+
+386
+00:16:27,666 --> 00:16:29,900
+before the acquire() happened
+
+387
+00:16:29,966 --> 00:16:31,400
+and we want to accommodate nested calls
+
+388
+00:16:31,700 --> 00:16:32,966
+and we want to accommodate nested calls
+
+389
+00:16:33,066 --> 00:16:35,866
+that is we want to accommodate several acquire() function calls
+
+390
+00:16:35,900 --> 00:16:37,100
+that is we want to accommodate several acquire() function calls
+
+391
+00:16:37,800 --> 00:16:41,000
+followed by several release() function calls
+
+392
+00:16:41,166 --> 00:16:43,933
+and our solution to this problem is simple:
+
+393
+00:16:43,933 --> 00:16:45,200
+We're going to use a counter
+
+394
+00:16:45,566 --> 00:16:49,933
+and that counter happens to be called "noff"
+
+395
+00:16:50,466 --> 00:16:52,966
+and it's specific to a core
+
+396
+00:16:53,600 --> 00:16:56,933
+this variable will be held in the cpu structure.
+
+397
+00:16:57,200 --> 00:16:58,533
+Each core has its own cpu structure
+
+398
+00:16:58,866 --> 00:17:00,200
+Each core has its own cpu structure
+
+399
+00:17:00,333 --> 00:17:03,466
+and each one will contain its own counter.
+
+400
+00:17:03,566 --> 00:17:06,500
+So the acquire() function will
+
+401
+00:17:06,566 --> 00:17:09,933
+increment the counter and then disable the interrupts
+
+402
+00:17:10,266 --> 00:17:11,666
+perhaps they were already disabled
+
+403
+00:17:11,666 --> 00:17:13,800
+but they will be after the acquire() for sure
+
+404
+00:17:14,533 --> 00:17:16,200
+and what's release() going to do ?
+
+405
+00:17:16,466 --> 00:17:18,766
+Well, release() is going to decrement the count
+
+406
+00:17:19,200 --> 00:17:22,933
+and to handle the nested case if it goes back to 0
+
+407
+00:17:23,133 --> 00:17:26,200
+then it's time to consider re-enabling them
+
+408
+00:17:26,400 --> 00:17:27,566
+More precisely
+
+409
+00:17:27,566 --> 00:17:30,466
+we need to ask whether they were previously enabled
+
+410
+00:17:30,533 --> 00:17:32,166
+before the first 
+
+411
+00:17:33,400 --> 00:17:34,566
+call to acquire()
+
+412
+00:17:34,933 --> 00:17:38,500
+so if the count is 0 and they were previously enabled
+
+413
+00:17:39,800 --> 00:17:41,566
+then we will re-enable them
+
+414
+00:17:42,100 --> 00:17:42,700
+that previously enabled status is kept in a variable called
+
+415
+00:17:42,700 --> 00:17:46,133
+that previously enabled status is kept in a variable called
+
+416
+00:17:46,466 --> 00:17:49,300
+interrupt enable "intena", I guess
+
+417
+00:17:49,533 --> 00:17:51,166
+and so we all
+
+418
+00:17:51,166 --> 00:17:53,800
+we will remember the previous interrupt status
+
+419
+00:17:53,933 --> 00:17:55,866
+before the first call to acquire()
+
+420
+00:17:55,866 --> 00:17:58,066
+in this variable which is a part of the cpu structure.
+
+421
+00:17:58,300 --> 00:18:00,733
+in this variable which is a part of the cpu structure.
+
+422
+00:18:01,900 --> 00:18:05,366
+Okay, now we can take a look at the code for
+
+423
+00:18:05,600 --> 00:18:08,200
+push_off() and pop_off().
+
+424
+00:18:08,766 --> 00:18:12,600
+Remember that in the acquire() function shown here
+
+425
+00:18:13,366 --> 00:18:14,766
+the first thing we did was
+
+426
+00:18:15,466 --> 00:18:18,700
+call push_off() to disable interrupts to avoid deadlock
+
+427
+00:18:18,700 --> 00:18:21,000
+so now we know what that means
+
+428
+00:18:21,000 --> 00:18:25,766
+and in the release(), we also end up calling
+
+429
+00:18:26,166 --> 00:18:27,500
+pop_off()
+
+430
+00:18:28,600 --> 00:18:30,966
+Here's the code for release()
+
+431
+00:18:30,966 --> 00:18:33,100
+and right before we return
+
+432
+00:18:33,166 --> 00:18:36,466
+we re-enable interrupts if appropriate.
+
+433
+00:18:36,666 --> 00:18:40,200
+So, let's take a look at push_off() and pop_off().
+
+434
+00:18:43,566 --> 00:18:45,200
+push_off() is called by acquire()
+
+435
+00:18:45,200 --> 00:18:47,133
+we immediately turn interrupts off.
+
+436
+00:18:47,133 --> 00:18:48,533
+We disable interrupts.
+
+437
+00:18:48,666 --> 00:18:49,733
+Well, first we
+
+438
+00:18:50,133 --> 00:18:53,300
+find out what the previous status of the interrupts was
+
+439
+00:18:53,333 --> 00:18:54,533
+that's called "old"
+
+440
+00:18:54,866 --> 00:18:57,666
+and then here we're accessing the cpu structure
+
+441
+00:18:57,800 --> 00:19:01,700
+and if this is the first call to acquire()
+
+442
+00:19:01,866 --> 00:19:04,800
+that is, that the counter is already is previously 0
+
+443
+00:19:04,866 --> 00:19:07,400
+and we're going to save the old status
+
+444
+00:19:07,733 --> 00:19:10,100
+but in any case we're going to increment the counter
+
+445
+00:19:10,900 --> 00:19:13,066
+pop_off() is as you'd expect
+
+446
+00:19:13,733 --> 00:19:14,600
+pretty similar.
+
+447
+00:19:14,900 --> 00:19:19,600
+We're accessing the counter and the "intena" variable here
+
+448
+00:19:20,100 --> 00:19:21,533
+We're accessing the counter and the "intena" variable here
+
+449
+00:19:22,166 --> 00:19:25,266
+so we start by getting a pointer to the cpu structure
+
+450
+00:19:26,000 --> 00:19:29,566
+and then we decrement the counter at this point here
+
+451
+00:19:29,800 --> 00:19:31,600
+and if it went to 0
+
+452
+00:19:31,900 --> 00:19:35,066
+and interrupts were previously enabled
+
+453
+00:19:35,133 --> 00:19:36,966
+then we turn them back on at this point.
+
+454
+00:19:36,966 --> 00:19:37,866
+then we turn them back on at this point.
+
+455
+00:19:38,700 --> 00:19:39,566
+We also have some
+
+456
+00:19:40,066 --> 00:19:41,166
+error checking here.
+
+457
+00:19:41,500 --> 00:19:44,566
+If for some reason we call pop_off() and interrupts
+
+458
+00:19:44,700 --> 00:19:46,533
+are already enabled something drastically the matter
+
+459
+00:19:46,866 --> 00:19:48,066
+are already enabled something drastically the matter
+
+460
+00:19:48,166 --> 00:19:49,700
+so we print an error message.
+
+461
+00:19:50,100 --> 00:19:53,366
+And we also make sure that the counter is not 0 or smaller
+
+462
+00:19:53,400 --> 00:19:55,166
+And we also make sure that the counter is not 0 or smaller
+
+463
+00:19:55,533 --> 00:19:58,400
+that would also be some sort of an error condition.
+
+464
+00:19:58,766 --> 00:20:01,066
+Okay, that's it for spinlocks.
+
+465
+00:20:01,600 --> 00:20:03,066
+See you in the next video.
+

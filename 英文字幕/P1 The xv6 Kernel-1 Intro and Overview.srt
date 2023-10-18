@@ -1,0 +1,904 @@
+1
+00:00:01,000 --> 00:00:05,466
+This is the first in a series of videos on the xv6
+
+2
+00:00:05,666 --> 00:00:07,266
+operating system kernel.
+
+3
+00:00:07,666 --> 00:00:09,900
+This is a very short but very sweet Unix-like operating system
+
+4
+00:00:09,900 --> 00:00:11,800
+This is a very short but very sweet Unix-like operating system
+
+5
+00:00:12,066 --> 00:00:14,566
+that's used for educational purposes.
+
+6
+00:00:14,766 --> 00:00:16,166
+It was developed at MIT and used to other places as well.
+
+7
+00:00:16,166 --> 00:00:18,166
+It was developed at MIT and used to other places as well.
+
+8
+00:00:19,800 --> 00:00:21,200
+This is an operating system that's used by students primarily in an operating system course.
+
+9
+00:00:21,200 --> 00:00:23,266
+This is an operating system that's used by students primarily in an operating system course.
+
+10
+00:00:23,266 --> 00:00:24,300
+This is an operating system that's used by students primarily in an operating system course.
+
+11
+00:00:24,300 --> 00:00:25,666
+This is an operating system that's used by students primarily in an operating system course.
+
+12
+00:00:26,066 --> 00:00:30,600
+And there are two implementations of this kernel.
+
+13
+00:00:31,100 --> 00:00:34,000
+One for the x86 architecture
+
+14
+00:00:34,133 --> 00:00:37,500
+and one for the RISC-V architecture.
+
+15
+00:00:38,100 --> 00:00:39,766
+In this series of videos I'm going to be talking about the RISC-V version.
+
+16
+00:00:39,766 --> 00:00:42,266
+In this series of videos I'm going to be talking about the RISC-V version.
+
+17
+00:00:42,800 --> 00:00:47,366
+The RISC-V version that is used is a 64 bit processor
+
+18
+00:00:47,666 --> 00:00:52,133
+and whether using the x86 version or the RISC-V version,
+
+19
+00:00:52,766 --> 00:00:53,666
+you're probably
+
+20
+00:00:53,966 --> 00:00:57,700
+going to be using it in an emulated fashion
+
+21
+00:00:57,866 --> 00:00:59,966
+using an emulator like QEMU.
+
+22
+00:01:00,900 --> 00:01:02,600
+Most likely you don't have a spare computer sitting around.
+
+23
+00:01:02,600 --> 00:01:03,933
+Most likely you don't have a spare computer sitting around.
+
+24
+00:01:04,666 --> 00:01:05,766
+Probably a spare
+
+25
+00:01:06,266 --> 00:01:09,666
+RISC-V processor is even less likely.
+
+26
+00:01:10,666 --> 00:01:11,166
+So
+
+27
+00:01:11,166 --> 00:01:13,900
+instead, you'll be running the operating system if you choose to run it
+
+28
+00:01:13,900 --> 00:01:14,700
+instead, you'll be running the operating system if you choose to run it
+
+29
+00:01:15,366 --> 00:01:16,600
+under an emulator.
+
+30
+00:01:17,000 --> 00:01:20,133
+But in any case, it's meant to run on a bear machine
+
+31
+00:01:20,566 --> 00:01:24,300
+and in fact, it's a multi core operating system.
+
+32
+00:01:25,366 --> 00:01:29,733
+So, QEMU is capable of emulating multi core systems.
+
+33
+00:01:30,333 --> 00:01:33,100
+As I said, it's short and very sweet.
+
+34
+00:01:33,700 --> 00:01:36,533
+It's only about 6000 lines of code.
+
+35
+00:01:36,900 --> 00:01:40,566
+Most of it is written in the C programming language
+
+36
+00:01:40,733 --> 00:01:44,666
+with maybe about 300 lines in assembly language.
+
+37
+00:01:45,733 --> 00:01:49,600
+In this video series, what I'm going to do is
+
+38
+00:01:49,933 --> 00:01:51,500
+do a walk through of more or less all of the code
+
+39
+00:01:51,500 --> 00:01:53,166
+do a walk through of more or less all of the code
+
+40
+00:01:53,166 --> 00:01:55,533
+to give you an idea of what's going on with it.
+
+41
+00:01:56,366 --> 00:01:58,466
+The code is very simple and 
+
+42
+00:01:58,966 --> 00:02:00,900
+well written and clean code
+
+43
+00:02:01,000 --> 00:02:02,466
+and I've read a lot of C code and written a lot of C code
+
+44
+00:02:02,800 --> 00:02:05,533
+and I've read a lot of C code and written a lot of C code
+
+45
+00:02:05,600 --> 00:02:08,333
+and I'm still learning new coding techniques.
+
+46
+00:02:08,333 --> 00:02:09,900
+And I think this is an example 
+
+47
+00:02:10,666 --> 00:02:12,066
+that is worth studying.
+
+48
+00:02:13,300 --> 00:02:14,866
+In addition, of course
+
+49
+00:02:15,066 --> 00:02:17,500
+as an operating system kernel
+
+50
+00:02:17,500 --> 00:02:19,200
+it illustrates some of the basic concepts that you'd be learning
+
+51
+00:02:19,200 --> 00:02:20,933
+it illustrates some of the basic concepts that you'd be learning
+
+52
+00:02:20,966 --> 00:02:23,100
+in an operating systems course.
+
+53
+00:02:23,300 --> 00:02:24,466
+So that's another good reason to study this code in detail.
+
+54
+00:02:24,466 --> 00:02:26,500
+So that's another good reason to study this code in detail.
+
+55
+00:02:27,600 --> 00:02:28,933
+For this video series,
+
+56
+00:02:29,100 --> 00:02:31,566
+I'm not going to assume that you have any 
+
+57
+00:02:32,266 --> 00:02:33,800
+knowledge of the RISC-V instruction set architecture,
+
+58
+00:02:34,933 --> 00:02:36,733
+knowledge of the RISC-V instruction set architecture,
+
+59
+00:02:37,300 --> 00:02:38,466
+but I will assume that you have had some assembly language coding.
+
+60
+00:02:38,466 --> 00:02:41,300
+but I will assume that you have had some assembly language coding.
+
+61
+00:02:41,566 --> 00:02:44,566
+I intend to walk through the assembly language instructions line by line
+
+62
+00:02:45,100 --> 00:02:47,600
+I intend to walk through the assembly language instructions line by line
+
+63
+00:02:47,600 --> 00:02:50,866
+so I will hold your hand there, so don't worry.
+
+64
+00:02:52,133 --> 00:02:54,166
+Have you had an operating system class?
+
+65
+00:02:54,533 --> 00:02:56,866
+Maybe you're in an operating system class right now that is using the xv6 system.
+
+66
+00:02:56,866 --> 00:02:59,866
+Maybe you're in an operating system class right now that is using the xv6 system.
+
+67
+00:03:00,166 --> 00:03:01,200
+In any case
+
+68
+00:03:01,200 --> 00:03:03,533
+I've taught a few operating system classes and
+
+69
+00:03:03,733 --> 00:03:04,733
+I'll probably go over some of the concepts as we encounter them.
+
+70
+00:03:05,300 --> 00:03:08,000
+I'll probably go over some of the concepts as we encounter them.
+
+71
+00:03:08,900 --> 00:03:10,266
+This is going to be a long series
+
+72
+00:03:10,266 --> 00:03:12,100
+so buckle your seat belts.
+
+73
+00:03:12,100 --> 00:03:14,400
+It's not for the faint of heart.
+
+74
+00:03:15,500 --> 00:03:18,000
+I'm assuming that you've got some brains
+
+75
+00:03:18,000 --> 00:03:20,166
+and for the more I'm assuming that you're
+
+76
+00:03:20,266 --> 00:03:23,666
+interested in this particular system and can focus for the amount of time that it's going to be
+
+77
+00:03:23,966 --> 00:03:25,466
+interested in this particular system and can focus for the amount of time that it's going to be
+
+78
+00:03:26,466 --> 00:03:27,800
+for this video series.
+
+79
+00:03:28,166 --> 00:03:30,533
+So let's look at some of the features that the kernel has.
+
+80
+00:03:31,400 --> 00:03:33,566
+So let's look at some of the features that the kernel has.
+
+81
+00:03:34,166 --> 00:03:36,533
+It's got processes.
+
+82
+00:03:37,400 --> 00:03:40,800
+These processes run in their own virtual address spaces,
+
+83
+00:03:41,100 --> 00:03:44,300
+so there are page tables for
+
+84
+00:03:44,533 --> 00:03:47,666
+page table for each address space to support the virtual address spaces.
+
+85
+00:03:47,900 --> 00:03:49,566
+page table for each address space to support the virtual address spaces.
+
+86
+00:03:50,733 --> 00:03:53,800
+The operating system supports files
+
+87
+00:03:53,966 --> 00:03:57,266
+Unix-like files and the directory hierarchy.
+
+88
+00:03:57,866 --> 00:04:02,666
+You can pipe data from one program to another program.
+
+89
+00:04:03,266 --> 00:04:03,866
+of course
+
+90
+00:04:03,866 --> 00:04:08,466
+there is a timer interrupt so there is multitasking.
+
+91
+00:04:09,166 --> 00:04:12,300
+The various processes are running in parallel 
+
+92
+00:04:12,766 --> 00:04:14,066
+with time-slicing.
+
+93
+00:04:15,100 --> 00:04:19,800
+There are 21 system calls that are implemented in xv6.
+
+94
+00:04:20,266 --> 00:04:22,266
+This is not a lot
+
+95
+00:04:23,600 --> 00:04:28,066
+The production Unix systems have more like 300 system calls
+
+96
+00:04:28,733 --> 00:04:32,533
+maybe 500 system calls but this is enough
+
+97
+00:04:32,966 --> 00:04:36,166
+to give you the core ideas of Unix.
+
+98
+00:04:38,200 --> 00:04:40,966
+There are a number of user programs that are supplied with this kernel
+
+99
+00:04:40,966 --> 00:04:42,200
+There are a number of user programs that are supplied with this kernel
+
+100
+00:04:42,533 --> 00:04:45,933
+and these can illustrate 
+
+101
+00:04:46,400 --> 00:04:48,933
+the capabilities of this operating system.
+
+102
+00:04:50,066 --> 00:04:52,866
+The operating system can run a simple shell program.
+
+103
+00:04:53,300 --> 00:04:53,700
+in fact
+
+104
+00:04:53,700 --> 00:04:55,600
+I made a video that talks about the shell program
+
+105
+00:04:55,600 --> 00:04:58,533
+in detail, you can look for that if you want.
+
+106
+00:04:59,000 --> 00:05:03,000
+Other common Unix programs: cat, echo
+
+107
+00:05:03,466 --> 00:05:04,266
+grep
+
+108
+00:05:05,000 --> 00:05:07,600
+kill, which is used to terminate a process.
+
+109
+00:05:07,933 --> 00:05:11,066
+ln, which is used to create a hard link from one file to another
+
+110
+00:05:11,333 --> 00:05:12,133
+ln, which is used to create a hard link from one file to another
+
+111
+00:05:12,733 --> 00:05:15,500
+and ls, which is used to list out the contents of a directory.
+
+112
+00:05:15,500 --> 00:05:17,866
+and ls which is used to list out the contents of a directory.
+
+113
+00:05:18,266 --> 00:05:19,800
+You can create directories.
+
+114
+00:05:20,066 --> 00:05:21,600
+You can remove files.
+
+115
+00:05:21,966 --> 00:05:26,666
+and wc is for counting the words in a file 
+
+116
+00:05:26,966 --> 00:05:28,333
+as well as the characters
+
+117
+00:05:29,300 --> 00:05:30,800
+so, all in all
+
+118
+00:05:30,933 --> 00:05:33,600
+I think that this can really be considered
+
+119
+00:05:33,666 --> 00:05:35,366
+a true Unix system,
+
+120
+00:05:35,566 --> 00:05:38,000
+although it's pretty short and simple
+
+121
+00:05:38,900 --> 00:05:40,700
+There's a lot that's missing okay
+
+122
+00:05:41,366 --> 00:05:42,166
+definitely
+
+123
+00:05:42,666 --> 00:05:45,366
+all the complexity of a real operating system is not there
+
+124
+00:05:45,366 --> 00:05:49,266
+a real operating system like Linux may have
+
+125
+00:05:49,500 --> 00:05:52,466
+you know as much as 100 times as much code
+
+126
+00:05:52,700 --> 00:05:54,166
+and you know we're talking
+
+127
+00:05:54,300 --> 00:05:55,766
+a million lines of the kernel
+
+128
+00:05:55,766 --> 00:05:58,066
+and you know when you add the device drivers in
+
+129
+00:05:58,333 --> 00:06:02,500
+you can go up to many millions of lines of code, so
+
+130
+00:06:03,500 --> 00:06:07,900
+this is just too much for any human to study really
+
+131
+00:06:07,933 --> 00:06:10,300
+and if you want to find out how kernels work
+
+132
+00:06:10,566 --> 00:06:12,600
+this is really the operating system for you.
+
+133
+00:06:13,500 --> 00:06:14,166
+But there are some things that are missing from your typical Unix or Linux system.
+
+134
+00:06:14,166 --> 00:06:16,866
+But there are some things that are missing from your typical Unix or Linux system.
+
+135
+00:06:17,133 --> 00:06:18,533
+But there are some things that are missing from your typical Unix or Linux system.
+
+136
+00:06:20,533 --> 00:06:25,466
+There are no user IDS and no login sequence, no verification
+
+137
+00:06:26,766 --> 00:06:30,300
+there are no protection bits associated with files
+
+138
+00:06:30,866 --> 00:06:33,966
+the read, write, execute protections that's not here
+
+139
+00:06:35,266 --> 00:06:38,500
+the "mount" command is just not available so
+
+140
+00:06:38,666 --> 00:06:40,300
+you just have one file system
+
+141
+00:06:41,733 --> 00:06:42,933
+in a real system
+
+142
+00:06:43,366 --> 00:06:46,600
+the virtual address spaces can be paged out to disk
+
+143
+00:06:46,733 --> 00:06:47,900
+so that you can run
+
+144
+00:06:48,200 --> 00:06:51,400
+more processes than will fit in physical main memory
+
+145
+00:06:52,266 --> 00:06:53,266
+more processes than will fit in physical main memory
+
+146
+00:06:54,066 --> 00:06:57,100
+that's not present in xv6
+
+147
+00:06:58,000 --> 00:06:58,800
+there's no support for networks, no sockets or anything like that
+
+148
+00:06:59,266 --> 00:07:03,133
+there's no support for networks, no sockets or anything like that
+
+149
+00:07:04,166 --> 00:07:07,533
+In fact there's no way for processes to communicate
+
+150
+00:07:07,800 --> 00:07:10,533
+or synchronize amongst themselves.
+
+151
+00:07:11,500 --> 00:07:14,566
+There are two device drivers but
+
+152
+00:07:15,066 --> 00:07:16,800
+a real operating system
+
+153
+00:07:16,800 --> 00:07:18,466
+a real world operating system is going to have many more device drivers
+
+154
+00:07:18,466 --> 00:07:20,500
+a real world operating system is going to have many more device drivers
+
+155
+00:07:20,866 --> 00:07:22,333
+to support all kinds of different bits of hardware that you might find
+
+156
+00:07:22,600 --> 00:07:24,466
+to support all kinds of different bits of hardware that you might find
+
+157
+00:07:25,133 --> 00:07:30,500
+and lastly there is only a limited amount of user code.
+
+158
+00:07:30,600 --> 00:07:34,066
+I listed the approximate 10 programs that are distributed with it
+
+159
+00:07:34,566 --> 00:07:35,733
+I listed the approximate 10 programs that are distributed with it
+
+160
+00:07:36,200 --> 00:07:37,333
+I listed the approximate 10 programs that are distributed with it
+
+161
+00:07:37,566 --> 00:07:38,400
+but a real usable Linux or Unix system is gonna have lots and lots of apps
+
+162
+00:07:39,066 --> 00:07:40,700
+but a real usable Linux or Unix system is gonna have lots and lots of apps
+
+163
+00:07:40,800 --> 00:07:43,533
+but a real usable Linux or Unix system is gonna have lots and lots of apps
+
+164
+00:07:44,200 --> 00:07:46,700
+so let's go over some of the
+
+165
+00:07:47,600 --> 00:07:49,333
+system calls that are present
+
+166
+00:07:49,333 --> 00:07:51,400
+I'll go over these in more detail later when we encounter them
+
+167
+00:07:51,400 --> 00:07:52,266
+I'll go over these in more detail later when we encounter them
+
+168
+00:07:52,333 --> 00:07:53,300
+but I just want to
+
+169
+00:07:53,300 --> 00:07:55,533
+kind of list them out here so you could see 
+
+170
+00:07:55,533 --> 00:07:56,500
+what we've got
+
+171
+00:07:57,533 --> 00:07:59,600
+So fork()
+
+172
+00:08:00,200 --> 00:08:03,600
+these are familiar from any Unix or Linux system
+
+173
+00:08:03,966 --> 00:08:06,266
+the parameters are slightly different in some cases but
+
+174
+00:08:07,100 --> 00:08:08,466
+the parameters are slightly different in some cases, but
+
+175
+00:08:09,133 --> 00:08:10,700
+the idea is there
+
+176
+00:08:11,733 --> 00:08:12,533
+in
+
+177
+00:08:13,200 --> 00:08:14,366
+concept anyway
+
+178
+00:08:14,900 --> 00:08:17,533
+fork() is used to create a new process
+
+179
+00:08:17,933 --> 00:08:19,366
+wait() is used to 
+
+180
+00:08:19,866 --> 00:08:22,733
+wait for a child process to terminate
+
+181
+00:08:23,133 --> 00:08:25,866
+exit() is for terminating a process
+
+182
+00:08:26,300 --> 00:08:28,066
+pipe() is for creating pipes
+
+183
+00:08:28,200 --> 00:08:29,600
+and then we've got open()
+
+184
+00:08:30,300 --> 00:08:31,100
+close()
+
+185
+00:08:31,666 --> 00:08:33,133
+read() and write()
+
+186
+00:08:33,333 --> 00:08:35,533
+for dealing with files.
+
+187
+00:08:36,866 --> 00:08:39,466
+We've got kill() to terminate process.
+
+188
+00:08:39,900 --> 00:08:44,000
+We've got exec(), which is passed a file name and will read in that file
+
+189
+00:08:44,700 --> 00:08:46,333
+We've got exec(), which is passed a file name and will read in that file
+
+190
+00:08:46,333 --> 00:08:48,100
+presumably it's an executable file
+
+191
+00:08:48,100 --> 00:08:50,466
+and we'll load it into memory creating a new virtual address space and execute it.
+
+192
+00:08:50,466 --> 00:08:53,133
+and we'll load it into memory creating a new virtual address space and execute it.
+
+193
+00:08:54,133 --> 00:08:57,333
+We can make inodes [ by mknod() ].
+
+194
+00:08:57,366 --> 00:08:58,166
+We can
+
+195
+00:08:58,866 --> 00:09:00,200
+create links [ by link() ]
+
+196
+00:09:00,600 --> 00:09:04,200
+hard links, and we can remove hard links and 
+
+197
+00:09:04,600 --> 00:09:05,866
+unlink files [ by unlink() ]
+
+198
+00:09:06,066 --> 00:09:09,466
+thereby possibly removing them if it's the last link.
+
+199
+00:09:10,000 --> 00:09:11,966
+We can get information about files [ by fstat() ].
+
+200
+00:09:12,933 --> 00:09:14,666
+We can change directories [ by chdir() ].
+
+201
+00:09:14,666 --> 00:09:14,866
+So, we
+
+202
+00:09:14,866 --> 00:09:17,266
+do have a notion of the current working directory.
+
+203
+00:09:17,900 --> 00:09:21,166
+dup() is used for copying file descriptors.
+
+204
+00:09:21,500 --> 00:09:24,500
+Now, we can get the program ID
+
+205
+00:09:24,600 --> 00:09:28,066
+sorry the process ID for the current process [by getpid()]
+
+206
+00:09:28,533 --> 00:09:30,900
+We can grow the heap [ by sbrk() ]
+
+207
+00:09:31,000 --> 00:09:34,400
+so, that's this function here, this system call here
+
+208
+00:09:34,666 --> 00:09:37,566
+and we can put a process to sleep for a while [by sleep()]
+
+209
+00:09:37,866 --> 00:09:39,333
+and we can also see how long the kernel has been running [ by uptime() ].
+
+210
+00:09:39,666 --> 00:09:40,933
+and we can also see how long the kernel has been running [ by uptime() ].
+
+211
+00:09:41,200 --> 00:09:43,600
+So in the next videos in this series
+
+212
+00:09:43,600 --> 00:09:45,133
+I'll be going through the code in quite a bit more detail
+
+213
+00:09:45,200 --> 00:09:46,533
+I'll be going through the code in quite a bit more detail
+
+214
+00:09:46,600 --> 00:09:48,933
+but I just want to start with giving you an idea 
+
+215
+00:09:48,966 --> 00:09:52,333
+of what this operating system kernel has,
+
+216
+00:09:52,566 --> 00:09:55,133
+and what its capabilities are.
+
+217
+00:09:55,500 --> 00:09:57,733
+So, you can determine whether you want to make the commitment for watching these videos.
+
+218
+00:09:57,900 --> 00:10:00,533
+So, you can determine whether you want to make the commitment for watching these videos.
+
+219
+00:10:00,566 --> 00:10:04,133
+As I said, this series is not for the faint of heart
+
+220
+00:10:04,133 --> 00:10:05,733
+it's not for the amateurs
+
+221
+00:10:06,200 --> 00:10:07,266
+it's for people who really want to
+
+222
+00:10:07,700 --> 00:10:10,266
+look at an operating system kernel in detail
+
+223
+00:10:10,266 --> 00:10:11,600
+and understand
+
+224
+00:10:12,266 --> 00:10:14,000
+a rather large but not
+
+225
+00:10:14,466 --> 00:10:17,200
+too large body of code, okay
+
+226
+00:10:17,466 --> 00:10:19,200
+Let's get started with the next video.
+

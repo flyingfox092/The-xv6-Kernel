@@ -1,0 +1,1004 @@
+1
+00:00:01,466 --> 00:00:04,066
+This video is part of a series on the xv6
+
+2
+00:00:04,100 --> 00:00:05,333
+operating system kernel.
+
+3
+00:00:06,066 --> 00:00:09,533
+In this video, I am going to introduce the main function
+
+4
+00:00:09,566 --> 00:00:11,966
+and talk a little bit about the startup procedure.
+
+5
+00:00:12,800 --> 00:00:16,000
+Before that, I'm going to go over the file organization
+
+6
+00:00:16,100 --> 00:00:19,133
+and I'll end by going over a couple of small files that we can take care of, quickly.
+
+7
+00:00:19,366 --> 00:00:22,533
+and I'll end by going over a couple of small files that we can take care of, quickly.
+
+8
+00:00:22,533 --> 00:00:23,333
+and I'll end by going over a couple of small files that we can take care of, quickly.
+
+9
+00:00:23,933 --> 00:00:25,966
+Let's begin with the files that are included with the xv6 system.
+
+10
+00:00:26,066 --> 00:00:28,400
+Let's begin with the files that are included with the xv6 system.
+
+11
+00:00:30,166 --> 00:00:31,566
+Here I've listed out all of the files
+
+12
+00:00:31,800 --> 00:00:32,900
+Here I've listed out all of the files
+
+13
+00:00:32,900 --> 00:00:35,166
+so you can see there are not too many of them.
+
+14
+00:00:36,166 --> 00:00:38,333
+The organization is pretty straightforward.
+
+15
+00:00:38,500 --> 00:00:40,566
+You've got two directories:
+
+16
+00:00:40,900 --> 00:00:42,133
+kernel and user.
+
+17
+00:00:43,000 --> 00:00:46,866
+These are the files that are in the kernel directory
+
+18
+00:00:47,133 --> 00:00:50,300
+basically it's just a bunch of C code files
+
+19
+00:00:50,533 --> 00:00:51,766
+some header files.
+
+20
+00:00:52,200 --> 00:00:54,733
+There are several assembly language files.
+
+21
+00:00:55,466 --> 00:00:57,666
+There's entry.S which I'll discuss based a little bit
+
+22
+00:00:57,733 --> 00:00:59,300
+There's entry.S which I'll discuss based a little bit
+
+23
+00:00:59,800 --> 00:01:00,800
+kernelvec.S
+
+24
+00:01:01,466 --> 00:01:05,133
+There is switch.S, very interesting one
+
+25
+00:01:05,900 --> 00:01:07,166
+trampoline.S
+
+26
+00:01:08,100 --> 00:01:10,700
+There's also initcode.S
+
+27
+00:01:12,000 --> 00:01:13,700
+There's also a file here that's used by the linker as well.
+
+28
+00:01:14,333 --> 00:01:16,933
+There's also a file here that's used by the linker as well.
+
+29
+00:01:18,666 --> 00:01:19,466
+There's also a file here that's used by the linker as well.
+
+30
+00:01:21,000 --> 00:01:24,100
+in the user directory, you have
+
+31
+00:01:24,366 --> 00:01:26,966
+the code for the initial process
+
+32
+00:01:27,366 --> 00:01:31,566
+as well as the code for the user application programs
+
+33
+00:01:31,566 --> 00:01:32,533
+the shell
+
+34
+00:01:32,700 --> 00:01:36,200
+and user mode programs like cat, echo, and so on.
+
+35
+00:01:38,000 --> 00:01:38,900
+In addition
+
+36
+00:01:39,100 --> 00:01:42,733
+you've got a makefile to build all these files
+
+37
+00:01:43,100 --> 00:01:45,600
+and you've got a readme, and a license file
+
+38
+00:01:45,766 --> 00:01:48,000
+so it's pretty straightforward organization.
+
+39
+00:01:51,266 --> 00:01:54,566
+This 6th system runs on a multi core computer
+
+40
+00:01:55,166 --> 00:01:56,066
+and 
+
+41
+00:01:56,866 --> 00:01:58,333
+when it begins
+
+42
+00:01:58,466 --> 00:02:01,566
+each core will start executing all at once.
+
+43
+00:02:01,566 --> 00:02:03,200
+They all begin at the same time.
+
+44
+00:02:03,600 --> 00:02:05,200
+It's a shared memory system
+
+45
+00:02:05,300 --> 00:02:08,000
+so all cores will share the exact same memory
+
+46
+00:02:08,166 --> 00:02:09,166
+so all cores will share the exact same memory
+
+47
+00:02:09,466 --> 00:02:13,200
+and they will all begin executing the same exact code
+
+48
+00:02:13,300 --> 00:02:17,333
+and that code is in a file called entry.S.
+
+49
+00:02:18,000 --> 00:02:18,966
+It's not a very long file, just a few lines
+
+50
+00:02:19,300 --> 00:02:21,400
+It's not a very long file, just a few lines
+
+51
+00:02:21,466 --> 00:02:24,466
+and that code will then transfer control to a C function called start in the file start.c
+
+52
+00:02:24,766 --> 00:02:29,466
+and that code will then transfer control to a C function called start in the file start.c
+
+53
+00:02:30,100 --> 00:02:31,966
+and that will then transfer control to the main function.
+
+54
+00:02:32,666 --> 00:02:34,866
+and that will then transfer control to the main function.
+
+55
+00:02:39,133 --> 00:02:42,600
+The assembly code that's in the entry file
+
+56
+00:02:43,000 --> 00:02:43,800
+basically
+
+57
+00:02:44,333 --> 00:02:47,866
+gets things set up so that we can execute C programs.
+
+58
+00:02:49,266 --> 00:02:52,933
+It will initialize the stack pointer register
+
+59
+00:02:53,133 --> 00:02:55,066
+the SP register
+
+60
+00:02:55,800 --> 00:02:58,966
+and it will initialize the TP register.
+
+61
+00:03:00,200 --> 00:03:04,733
+Each core will share main memory, so they will be
+
+62
+00:03:05,133 --> 00:03:07,566
+accessing the same set of global variables
+
+63
+00:03:08,000 --> 00:03:11,500
+but each core will need its own stack.
+
+64
+00:03:11,533 --> 00:03:14,400
+They can't overlap that wouldn't work at all
+
+65
+00:03:14,700 --> 00:03:15,500
+so
+
+66
+00:03:15,666 --> 00:03:19,066
+there's a separate stack space for each of the cores
+
+67
+00:03:19,166 --> 00:03:21,333
+and the code entry.S will
+
+68
+00:03:22,400 --> 00:03:26,400
+initialize the stack pointer register for the core
+
+69
+00:03:26,566 --> 00:03:27,666
+appropriately
+
+70
+00:03:28,566 --> 00:03:29,366
+also
+
+71
+00:03:29,733 --> 00:03:32,933
+there's a TP register that stands for thread Pointer
+
+72
+00:03:33,066 --> 00:03:36,266
+but the TP register actually will contain
+
+73
+00:03:36,500 --> 00:03:40,366
+the core number, the number of the core 0, 1, 2, or so on
+
+74
+00:03:40,766 --> 00:03:44,933
+instead of some sort of a thread pointer and that
+
+75
+00:03:44,933 --> 00:03:48,366
+register will stay constant on that core throughout
+
+76
+00:03:48,366 --> 00:03:50,500
+so that allows the code to ask at any time what core am I running on.
+
+77
+00:03:50,666 --> 00:03:54,300
+so that allows the code to ask at any time what core am I running on.
+
+78
+00:03:54,866 --> 00:03:56,266
+so once those are set up
+
+79
+00:03:56,966 --> 00:04:00,500
+we transfer control to the start function
+
+80
+00:04:01,600 --> 00:04:02,366
+In another video
+
+81
+00:04:02,366 --> 00:04:04,166
+I talk about the different modes that the
+
+82
+00:04:04,166 --> 00:04:06,333
+RISC-V processor can execute in.
+
+83
+00:04:06,733 --> 00:04:08,766
+It can execute in machine mode
+
+84
+00:04:08,800 --> 00:04:11,000
+supervisor mode and user mode.
+
+85
+00:04:11,900 --> 00:04:14,400
+All of the kernel runs in supervisor mode
+
+86
+00:04:14,400 --> 00:04:16,133
+except for a tiny bit of code
+
+87
+00:04:16,133 --> 00:04:17,666
+which is in this start.c file and that so initially when the system begins execution.
+
+88
+00:04:17,733 --> 00:04:21,600
+which is in this start.c file and that so initially when the system begins execution.
+
+89
+00:04:22,500 --> 00:04:25,366
+which is in this start.c file and that so initially when the system begins execution.
+
+90
+00:04:26,600 --> 00:04:29,100
+It begins executing in machine mode
+
+91
+00:04:29,100 --> 00:04:32,733
+and the code here will take care of a few bookkeeping things
+
+92
+00:04:32,800 --> 00:04:34,266
+and the code here will take care of a few bookkeeping things
+
+93
+00:04:34,333 --> 00:04:36,600
+and then switch to supervisor mode
+
+94
+00:04:36,800 --> 00:04:41,566
+and the cores will remain in supervisor mode after that
+
+95
+00:04:42,500 --> 00:04:45,966
+Okay, now let's take a look at the main function.
+
+96
+00:04:46,500 --> 00:04:48,100
+Here is the code
+
+97
+00:04:48,133 --> 00:04:49,866
+for main.c
+
+98
+00:04:50,166 --> 00:04:54,200
+it's not very long and it contains nothing more than the main function
+
+99
+00:04:54,400 --> 00:04:55,600
+it's not very long and it contains nothing more than the main function
+
+100
+00:04:56,866 --> 00:04:59,066
+so let's see what happens
+
+101
+00:04:59,933 --> 00:05:00,700
+remember that
+
+102
+00:05:00,700 --> 00:05:04,366
+each core will begin executing this code in parallel
+
+103
+00:05:04,366 --> 00:05:08,466
+so the all cores will begin with this if statement
+
+104
+00:05:09,266 --> 00:05:13,333
+cpuid() is a short function that basically looks at
+
+105
+00:05:13,533 --> 00:05:16,733
+and returns the value of the TP register.
+
+106
+00:05:18,400 --> 00:05:20,866
+So, on core 0 this function will return 0
+
+107
+00:05:21,100 --> 00:05:24,300
+and core 0 will then execute this code here.
+
+108
+00:05:24,966 --> 00:05:27,166
+All other cores will execute this code here instead.
+
+109
+00:05:28,333 --> 00:05:30,900
+All other cores will execute this code here instead.
+
+110
+00:05:31,933 --> 00:05:32,800
+So, what does the code do?  Well, core 0 is tasked with initializing things
+
+111
+00:05:33,300 --> 00:05:37,933
+So, what does the code do?  Well, core 0 is tasked with initializing things
+
+112
+00:05:38,166 --> 00:05:40,866
+so you see a lot of calls to init
+
+113
+00:05:41,000 --> 00:05:43,800
+init this, init that and init some other stuff
+
+114
+00:05:44,300 --> 00:05:46,866
+It also prints out this message that
+
+115
+00:05:47,200 --> 00:05:48,666
+the kernel is booting
+
+116
+00:05:52,200 --> 00:05:53,933
+there is a global variable or
+
+117
+00:05:53,933 --> 00:05:56,333
+a shared variable here, it's in the memory space
+
+118
+00:05:56,333 --> 00:05:58,800
+so, of course, all cores will have access to it
+
+119
+00:05:59,266 --> 00:06:00,966
+and it's used for synchronization
+
+120
+00:06:01,566 --> 00:06:02,900
+This keyword here, "volatile", is a little bit of
+
+121
+00:06:03,133 --> 00:06:05,500
+This keyword here, "volatile", is a little bit of
+
+122
+00:06:05,766 --> 00:06:10,300
+C magic that says that this variable is used for synchronization
+
+123
+00:06:10,766 --> 00:06:11,500
+C magic that says that this variable is used for synchronization
+
+124
+00:06:11,500 --> 00:06:14,466
+possibly by multiple cores or concurrent threads
+
+125
+00:06:14,866 --> 00:06:18,266
+and it is in fact used to control the beginning of the other cores
+
+126
+00:06:18,700 --> 00:06:22,700
+and it is in fact used to control the beginning of the other cores
+
+127
+00:06:22,900 --> 00:06:25,600
+so it is initialized to
+
+128
+00:06:26,166 --> 00:06:27,966
+0 or false if you will
+
+129
+00:06:29,500 --> 00:06:33,133
+and once core 0 is done initializing, it will change it to
+
+130
+00:06:33,466 --> 00:06:34,266
+true.
+
+131
+00:06:35,000 --> 00:06:36,400
+All the other cores
+
+132
+00:06:36,533 --> 00:06:38,800
+go into this tight loop where they're testing it
+
+133
+00:06:39,133 --> 00:06:42,566
+and they keep testing until it is found to be true
+
+134
+00:06:42,566 --> 00:06:44,766
+and then they execute this code here
+
+135
+00:06:44,766 --> 00:06:46,333
+and they start out by printing
+
+136
+00:06:46,966 --> 00:06:47,766
+hart something starting.
+
+137
+00:06:48,700 --> 00:06:50,200
+hart something starting.
+
+138
+00:06:51,000 --> 00:06:53,466
+The term "hart" is synonymous with core
+
+139
+00:06:53,466 --> 00:06:54,933
+at least for these videos
+
+140
+00:06:55,000 --> 00:06:57,933
+and so basically saying core 1 is starting
+
+141
+00:06:57,933 --> 00:06:59,466
+core 2 is starting and so on
+
+142
+00:06:59,733 --> 00:07:01,700
+and they are pulling up their own call, a cpuid() right here
+
+143
+00:07:01,966 --> 00:07:04,533
+and they are pulling up their own call, a cpuid() right here
+
+144
+00:07:06,966 --> 00:07:10,966
+The last thing that core 0 does is it starts the 
+
+145
+00:07:11,900 --> 00:07:13,200
+code for
+
+146
+00:07:13,500 --> 00:07:16,300
+the init process so that's what's going on here
+
+147
+00:07:16,966 --> 00:07:22,333
+and then it sets started to one and then the other
+
+148
+00:07:23,900 --> 00:07:26,533
+the other cores will do some initialization here.
+
+149
+00:07:27,266 --> 00:07:28,166
+kvminit
+
+150
+00:07:29,000 --> 00:07:29,800
+trapinit
+
+151
+00:07:30,533 --> 00:07:34,000
+plicinit, these are per core initialization things
+
+152
+00:07:34,000 --> 00:07:35,866
+and they happen in core 0 as well.
+
+153
+00:07:35,866 --> 00:07:37,366
+kvminit
+
+154
+00:07:38,266 --> 00:07:39,066
+trapinit
+
+155
+00:07:39,933 --> 00:07:42,933
+and plicinit happen here for core 0.
+
+156
+00:07:43,900 --> 00:07:47,533
+Once all of that happens on all of the cores
+
+157
+00:07:47,866 --> 00:07:51,266
+each core will then call the scheduler() function
+
+158
+00:07:51,500 --> 00:07:53,466
+and what scheduler() will do?
+
+159
+00:07:53,466 --> 00:07:56,200
+It will look for a process to execute
+
+160
+00:07:56,200 --> 00:07:59,566
+so at that point all the cores will start executing
+
+161
+00:07:59,866 --> 00:08:00,933
+processes
+
+162
+00:08:03,566 --> 00:08:06,500
+We also see this  __sync_synchronize() 
+
+163
+00:08:07,800 --> 00:08:08,600
+function here.
+
+164
+00:08:08,600 --> 00:08:11,800
+This is again a little bit of compiler magic
+
+165
+00:08:12,466 --> 00:08:15,933
+compilers will try to optimize things and what this is doing is telling the compiler
+
+166
+00:08:16,400 --> 00:08:18,400
+compilers will try to optimize things and what this is doing is telling the compiler
+
+167
+00:08:18,533 --> 00:08:21,266
+to chill out and not do that optimization.
+
+168
+00:08:21,600 --> 00:08:23,600
+The compiler might rearrange code in order to
+
+169
+00:08:23,933 --> 00:08:26,566
+The compiler might rearrange code in order to
+
+170
+00:08:26,600 --> 00:08:29,400
+try to achieve greater performance and efficiency.
+
+171
+00:08:29,700 --> 00:08:32,933
+What the synchronize does is tell the compiler
+
+172
+00:08:33,000 --> 00:08:34,566
+make sure you finish everything above it first before you start anything after it
+
+173
+00:08:35,133 --> 00:08:38,966
+make sure you finish everything above it first before you start anything after it
+
+174
+00:08:39,066 --> 00:08:40,366
+so it's saying
+
+175
+00:08:40,866 --> 00:08:43,066
+please finish all of this initialization
+
+176
+00:08:43,133 --> 00:08:44,466
+before you change this variable to 1.
+
+177
+00:08:44,700 --> 00:08:46,000
+before you change this variable to 1.
+
+178
+00:08:46,200 --> 00:08:49,366
+You may not be able to understand what I'm doing here.
+
+179
+00:08:49,566 --> 00:08:50,933
+You're saying to the compiler
+
+180
+00:08:51,000 --> 00:08:52,400
+but I'm telling you
+
+181
+00:08:52,533 --> 00:08:54,100
+you need to finish doing
+
+182
+00:08:54,133 --> 00:08:56,333
+every single thing above this before
+
+183
+00:08:56,700 --> 00:08:59,166
+you think about changing that variable to 1.
+
+184
+00:08:59,966 --> 00:09:01,800
+Likewise down here
+
+185
+00:09:02,300 --> 00:09:04,733
+it's telling the compiler the same thing
+
+186
+00:09:05,533 --> 00:09:07,766
+don't start executing this stuff
+
+187
+00:09:07,800 --> 00:09:10,200
+until you have completed this while loop here.
+
+188
+00:09:12,700 --> 00:09:16,200
+Okay, there are several small files that
+
+189
+00:09:16,766 --> 00:09:18,300
+I want to take a quick look at
+
+190
+00:09:18,300 --> 00:09:19,700
+and get these out of the way.
+
+191
+00:09:21,466 --> 00:09:23,100
+types.h
+
+192
+00:09:23,766 --> 00:09:25,866
+contains just these typedef here.
+
+193
+00:09:27,000 --> 00:09:28,400
+You're probably familiar with these abbreviations for familiar types.
+
+194
+00:09:28,800 --> 00:09:32,133
+You're probably familiar with these abbreviations for familiar types.
+
+195
+00:09:32,400 --> 00:09:33,700
+So
+
+196
+00:09:33,700 --> 00:09:36,366
+on the architecture we're using, the RISC-V architecture
+
+197
+00:09:36,366 --> 00:09:37,400
+with the toolchain
+
+198
+00:09:37,666 --> 00:09:41,366
+it's a 64 bit machine, integers will be 32 bits.
+
+199
+00:09:43,533 --> 00:09:45,066
+So, we define
+
+200
+00:09:45,333 --> 00:09:49,766
+uint8 (unsigned 8 bit) values, uint16 (unsigned 16 bit) values
+
+201
+00:09:49,800 --> 00:09:52,900
+uint32 (unsigned 32 bit) values and uint64 (unsigned 64 bit) values
+
+202
+00:09:53,500 --> 00:09:57,600
+We use this type uint64 quite a bit for addresses and pointers.
+
+203
+00:09:57,733 --> 00:09:59,900
+We use this type uint64 quite a bit for addresses and pointers.
+
+204
+00:10:00,666 --> 00:10:01,333
+Okay
+
+205
+00:10:01,333 --> 00:10:04,933
+next file I want to look at is param.h
+
+206
+00:10:05,166 --> 00:10:08,400
+There are a number of things that are hard coded into 
+
+207
+00:10:08,466 --> 00:10:11,600
+the kernel, so let me just go through these quickly.
+
+208
+00:10:12,933 --> 00:10:13,933
+NPROC
+
+209
+00:10:13,933 --> 00:10:17,766
+the maximum number of processes is just set to 64
+
+210
+00:10:18,333 --> 00:10:21,066
+the number of cores is 8
+
+211
+00:10:21,700 --> 00:10:23,000
+and you have other things
+
+212
+00:10:23,800 --> 00:10:25,600
+the number of open files
+
+213
+00:10:25,600 --> 00:10:27,866
+the number of open files per system
+
+214
+00:10:28,766 --> 00:10:30,100
+number of inodes
+
+215
+00:10:30,533 --> 00:10:31,933
+number of devices
+
+216
+00:10:32,566 --> 00:10:34,533
+the device number ROOTDEV
+
+217
+00:10:34,866 --> 00:10:37,400
+MAXARG this is the
+
+218
+00:10:37,933 --> 00:10:40,466
+maximum number of arguments that you can have on
+
+219
+00:10:40,966 --> 00:10:42,700
+an exact system call
+
+220
+00:10:43,400 --> 00:10:46,766
+MAXOPBLOCKS, LOGSIZE, NBUF
+
+221
+00:10:47,100 --> 00:10:49,866
+FSSIZE, MAXPATH that's the
+
+222
+00:10:50,266 --> 00:10:53,966
+maximum number of characters in a files path name
+
+223
+00:10:55,700 --> 00:10:59,900
+Finally, I want to look at a file called defs.h
+
+224
+00:11:00,300 --> 00:11:01,600
+and this
+
+225
+00:11:02,600 --> 00:11:03,400
+is
+
+226
+00:11:04,300 --> 00:11:06,600
+looked it out here on these four pages so
+
+227
+00:11:06,666 --> 00:11:08,366
+you can see what's going on
+
+228
+00:11:08,533 --> 00:11:10,700
+but basically this is just for the compiler
+
+229
+00:11:10,900 --> 00:11:12,533
+contains a bunch of function prototypes, so, for example
+
+230
+00:11:13,466 --> 00:11:15,733
+contains a bunch of function prototypes, so, for example
+
+231
+00:11:16,733 --> 00:11:21,000
+the file console.c contains
+
+232
+00:11:21,500 --> 00:11:24,700
+at least these three functions which might be used
+
+233
+00:11:24,766 --> 00:11:26,000
+in other files as well
+
+234
+00:11:26,000 --> 00:11:28,300
+so this is basically
+
+235
+00:11:29,500 --> 00:11:31,266
+just the function prototypes
+
+236
+00:11:31,300 --> 00:11:32,133
+there's nothing
+
+237
+00:11:32,333 --> 00:11:35,333
+much of interest here we'll encounter all these files later, so let's go through all these pages
+
+238
+00:11:35,566 --> 00:11:37,800
+much of interest here we'll encounter all these files later, so let's go through all these pages.
+
+239
+00:11:38,000 --> 00:11:39,966
+On the last page, there is
+
+240
+00:11:41,000 --> 00:11:43,200
+a preprocessor macro.
+
+241
+00:11:43,533 --> 00:11:47,066
+Perhaps you've seen this in other context
+
+242
+00:11:47,200 --> 00:11:50,333
+but this is the number of elements and you would have
+
+243
+00:11:51,100 --> 00:11:52,566
+a variable here and
+
+244
+00:11:53,000 --> 00:11:54,200
+an array variable
+
+245
+00:11:54,200 --> 00:11:55,166
+and what it does is (that) it just asks how big is the entire array
+
+246
+00:11:55,266 --> 00:11:58,666
+and what it does is (that) it just asks how big is the entire array
+
+247
+00:11:58,966 --> 00:11:59,766
+and
+
+248
+00:12:00,366 --> 00:12:02,300
+how big is a single element
+
+249
+00:12:02,400 --> 00:12:05,000
+and it just gives you the number of elements.
+
+250
+00:12:05,300 --> 00:12:06,666
+Okay, that's it for this video.
+
+251
+00:12:06,666 --> 00:12:08,200
+I'll see you in the next video.
+
